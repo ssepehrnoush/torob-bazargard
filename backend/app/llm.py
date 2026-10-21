@@ -1,6 +1,7 @@
 """Minimal OpenAI-compatible chat client with provider fallback (OpenAI <-> BoxAPI)."""
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import time
@@ -35,10 +36,31 @@ def describe() -> dict:
     return {"providers": [{"name": e.name, "model": e.model} for e in eps], "available": bool(eps)}
 
 
+_cache: dict[str, tuple[float, dict]] = {}
+CACHE_TTL_S = 900
+
+
+def _cache_key(*parts) -> str:
+    return hashlib.sha256(json.dumps(parts, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()
+
+
 async def chat(messages: list[dict], tools: list[dict] | None = None, tool_choice: str | dict | None = None,
                temperature: float | None = None, max_tokens: int | None = None,
                json_mode: bool = False) -> dict:
-    """Return the assistant message dict. Tries each configured provider in order."""
+    """Return the assistant message dict. Tries each configured provider in order.
+    Identical requests within 15 minutes are answered from memory (saves the shared API budget)."""
+    key = _cache_key(messages, [t["function"]["name"] for t in tools or []], tool_choice, max_tokens, json_mode)
+    hit = _cache.get(key)
+    if hit and time.monotonic() - hit[0] < CACHE_TTL_S:
+        return dict(hit[1])
+    msg = await _chat(messages, tools, tool_choice, temperature, max_tokens, json_mode)
+    if len(_cache) > 500:
+        _cache.clear()
+    _cache[key] = (time.monotonic(), dict(msg))
+    return msg
+
+
+async def _chat(messages, tools, tool_choice, temperature, max_tokens, json_mode) -> dict:
     errors = []
     for ep in config.llm_endpoints():
         body: dict = {"model": ep.model, "messages": messages, **ep.extra}
