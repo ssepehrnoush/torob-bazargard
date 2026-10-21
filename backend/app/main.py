@@ -308,9 +308,10 @@ AUDIO_TYPES = ("audio/", "video/webm", "video/mp4", "application/octet-stream")
 
 
 @app.get("/api/llm/check")
-async def llm_check():
-    """Which AI providers this server can reach right now (BoxAPI first, the backup next)."""
-    return {"providers": await llm.check_providers()}
+async def llm_check(deep: bool = False):
+    """Which AI providers this server can reach right now (BoxAPI first, the backup next); deep=1 asks each for a
+    five-token reply, because a provider can list its models from a country it refuses to answer."""
+    return {"providers": await llm.check_providers(deep)}
 
 
 @app.post("/api/stt")

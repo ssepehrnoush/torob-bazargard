@@ -66,20 +66,25 @@ class BudgetExceeded(LLMUnavailable):
     pass
 
 
-_check: tuple[float, list] | None = None
+_check: dict[bool, tuple[float, list]] = {}
 
 
-async def check_providers() -> list[dict]:
-    """Can this server reach each provider? Lists the models (free, no tokens) with every configured key; cached
-    for five minutes. Shows only status codes, never keys."""
-    global _check
-    if _check and time.monotonic() - _check[0] < 300:
-        return _check[1]
+async def check_providers(deep: bool = False) -> list[dict]:
+    """Can this server reach each provider? Lists the models (free) or, with deep, asks for a five-token reply, with
+    every configured key; cached for five minutes. Shows only status codes, never keys."""
+    hit = _check.get(deep)
+    if hit and time.monotonic() - hit[0] < 300:
+        return hit[1]
     out = []
     for ep in config.llm_endpoints():
         t0 = time.monotonic()
         try:
-            r = await client().get(f"{ep.base_url}/models", headers={"Authorization": f"Bearer {ep.api_key}"}, timeout=15)
+            if deep:
+                r = await client().post(f"{ep.base_url}/chat/completions", headers={"Authorization": f"Bearer {ep.api_key}"},
+                                        json={"model": ep.model, "messages": [{"role": "user", "content": "Reply with: ok"}],
+                                              "max_completion_tokens": 5, **ep.extra}, timeout=30)
+            else:
+                r = await client().get(f"{ep.base_url}/models", headers={"Authorization": f"Bearer {ep.api_key}"}, timeout=15)
             body = r.text[:400].lower()
             note = ("blocked for this country" if "unsupported_country" in body
                     else "out of credit" if r.status_code == 402 or "budget" in body else None)
@@ -88,7 +93,7 @@ async def check_providers() -> list[dict]:
         except httpx.HTTPError as e:
             out.append({"provider": ep.name, "model": ep.model, "status": None, "ok": False, "note": type(e).__name__,
                         "ms": round((time.monotonic() - t0) * 1000)})
-    _check = (time.monotonic(), out)
+    _check[deep] = (time.monotonic(), out)
     return out
 
 
