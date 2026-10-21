@@ -14,6 +14,7 @@
 - نسخهٔ آنلاین: `https://bazargard.liara.run` (روی لیارا)
 - ویدیوی دمو و سناریو: [VIDEO-SCRIPT.md](VIDEO-SCRIPT.md)
 - یادداشت‌های کامل داده: [DATASET-NOTES.md](DATASET-NOTES.md)
+- امنیت ایجنت (چک‌لیست کارگاه AI Governance): [SECURITY.md](SECURITY.md)
 
 ---
 

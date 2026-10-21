@@ -154,9 +154,21 @@ def main() -> None:
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--create", action="store_true")
     ap.add_argument("--follow", help="only follow the build logs of this release id")
+    ap.add_argument("--llm-off", action="store_true", help="kill switch: LLM_DISABLED=1 (app keeps working rule-based)")
+    ap.add_argument("--llm-on", action="store_true")
+    ap.add_argument("--scale", type=int, help="0 stops the app, 1 starts it again")
     a = ap.parse_args()
     if a.follow:
         follow(a.follow)
+        return
+    if a.llm_off or a.llm_on:
+        st, d = call("POST", "/v1/projects/update-envs", {"project": APP, "variables": [
+            {"key": "LLM_DISABLED", "value": "1" if a.llm_off else "0"}]})
+        print("LLM_DISABLED =", "1" if a.llm_off else "0", "->", st)
+        return
+    if a.scale is not None:
+        st, d = call("POST", f"/v1/projects/{APP}/actions/scale", {"scale": a.scale})
+        print("scale", a.scale, "->", st)
         return
     if not TOKEN:
         sys.exit("LIARA_API_TOKEN missing")
