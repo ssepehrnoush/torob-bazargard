@@ -184,7 +184,7 @@ def state_note(ctx: Ctx, ui: dict, sess: dict) -> str:
     lines = [
         "وضعیت فعلی (برای تصمیم‌گیری؛ به کاربر تکرار نکن):",
         f"- اکنون: {DAY_FA[now.weekday()]} ساعت {now:%H:%M} به وقت تهران",
-        f"- محل کاربر: {ctx.place} | محدوده: {range_label(ctx)} | رفت‌وآمد: {TRAVEL_FA.get(ctx.travel_mode, ctx.travel_mode)} | زمان مراجعه: {VISIT_PRESETS.get(ctx.visit, ctx.visit)}",
+        f"- محل کاربر: {'موقعیت فعلی کاربر (GPS)' if ctx.place in ('اینجا', 'موقعیت فعلی من') else ctx.place} | محدوده: {range_label(ctx)} | رفت‌وآمد: {TRAVEL_FA.get(ctx.travel_mode, ctx.travel_mode)} | زمان مراجعه: {VISIT_PRESETS.get(ctx.visit, ctx.visit)}",
         f"- اصالت: {'فقط اورجینال' if ctx.originality == 'original_only' else 'هنوز نگفته / فرقی ندارد'}",
         f"- بودجه: {budget} | فقط قسطی: {'بله' if ctx.installments_only else 'خیر'} | فقط باز: {'بله' if ctx.open_only else 'خیر'}",
     ]
