@@ -19,7 +19,7 @@ export function Img({ src, className = "pimg" }: { src: string | null; className
 
 export function availability(p: PC, radius: number): string {
   if (p.n_nearby) {
-    const near = p.nearest_km != null ? ` · نزدیک‌ترین ${p.nearest_km < 1 ? fa(Math.round(p.nearest_km * 1000 / 10) * 10) + " متر" : fa(p.nearest_km.toFixed(1)).replace(".", "٫") + " کیلومتر"}` : "";
+    const near = p.nearest_km != null ? `، نزدیک‌ترین ${p.nearest_km < 1 ? fa(Math.round(p.nearest_km * 1000 / 10) * 10) + " متر" : fa(p.nearest_km.toFixed(1)).replace(".", "٫") + " کیلومتر"}` : "";
     return `${fa(p.n_nearby)} فروشگاه در ${fa(radius)} کیلومتری${near}`;
   }
   if (p.n_shops) return `${fa(p.n_shops)} فروشگاه، هیچ‌کدام در شعاع شما نیست`;
@@ -51,8 +51,8 @@ export function ProductCard({ p, ctx, compared, onShops, onCompare, onDetails }:
           <button className="ptitle clamp2" style={{ textAlign: "right" }} onClick={onDetails}>
             {p.title}
           </button>
-          <div className="price">{priceRange(p.price_min, p.price_max)}</div>
-          <div className="small muted row" style={{ gap: 5 }}>
+          <div className="price">{p.price_min ? `از ${toman(p.nearby_min_price || p.price_min)}` : "قیمت ثبت نشده"}</div>
+          <div className="shopsline row" style={{ gap: 5 }}>
             <Icon name="store" size={14} />
             <span className="grow">{availability(p, ctx.radius_km)}</span>
           </div>
@@ -80,7 +80,7 @@ export function ProductCard({ p, ctx, compared, onShops, onCompare, onDetails }:
       )}
       <div className="pactions">
         <button className="btn sm" onClick={onShops}>
-          <Icon name="store" size={16} /> فروشگاه‌ها و قیمت‌ها
+          <Icon name="pin" size={16} /> خرید حضوری
         </button>
         <button className={"btn sm " + (compared ? "dark" : "secondary")} onClick={onCompare} style={{ flex: "0 0 auto" }}>
           <Icon name={compared ? "check" : "compare"} size={16} /> مقایسه

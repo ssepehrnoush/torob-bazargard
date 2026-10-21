@@ -7,6 +7,10 @@ import { Img, availability } from "./Products";
 
 const MapView = lazy(() => import("./MapView").then((m) => ({ default: m.MapView })));
 
+export const BADGE_TONE: Record<string, string> = {
+  installment: "outline-blue", torobpay: "violet", delivery: "green", verified: "blue",
+};
+
 export function openTone(s: OpenState): "green" | "red" | "gray" {
   return s.state === "open" ? "green" : s.state === "closed" ? "red" : "gray";
 }
@@ -82,7 +86,7 @@ export function ShopsView({ pid, ctx, setCtx, picks, agentMsg, onOpenShop, onInq
         <div className="grow">
           <div className="small bold clamp2">{p?.title ?? "…"}</div>
           <div className="tiny muted">
-            {p ? `${priceRange(p.price_min, p.price_max)} · ${fa(p.n_shops)} فروشگاه در کل داده` : ""}
+            {p ? `${priceRange(p.price_min, p.price_max)}، ${fa(p.n_shops)} فروشگاه در کل داده` : ""}
           </div>
         </div>
       </div>
@@ -162,7 +166,7 @@ export function ShopsView({ pid, ctx, setCtx, picks, agentMsg, onOpenShop, onInq
       {data && (
         <div className="row between small muted" style={{ padding: "0 4px" }}>
           <span>
-            {fa(near.length)} فروشگاه در شعاع شما{far.length ? ` · ${fa(far.length)} دورتر` : ""}
+            {fa(near.length)} فروشگاه در شعاع شما{far.length ? `، ${fa(far.length)} دورتر` : ""}
           </span>
           {data.stats.price_min && <span>از {short(data.stats.price_min)} تا {short(data.stats.price_max)}</span>}
         </div>
@@ -170,6 +174,7 @@ export function ShopsView({ pid, ctx, setCtx, picks, agentMsg, onOpenShop, onInq
 
       {data && near.length === 0 && (
         <div className="card empty">
+          <img className="empty-art" src="/img/empty.webp" alt="" />
           در شعاع {fa(ctx.radius_km)} کیلومتری شما فروشگاهی با این کالا و این فیلترها نیست.
           {far.length > 0 && <div style={{ marginTop: 8 }}><button className="btn sm soft" onClick={() => setShowFar(true)}>دیدن {fa(far.length)} فروشگاه دورتر</button></div>}
         </div>
@@ -265,11 +270,11 @@ export function ShopCard({ i, rank, why, pick, selected, onToggle, onOpen, onOpe
         </span>
       </div>
       <div className="tiny muted" style={{ marginTop: -6 }}>
-        قیمت ثبت‌شده در ترب{i.freshness.ts ? ` (آخرین تغییر ${jalali(i.freshness.ts)})` : ""} · {i.stock.label}
+        قیمت ثبت‌شده در ترب{i.freshness.ts ? ` (آخرین تغییر ${jalali(i.freshness.ts)})` : ""}، {i.stock.label}
       </div>
 
       <div className="facts">
-        <span className="fact"><Icon name="pin" size={15} /> {i.distance_label} · {i.travel.label.replace("حدود ", "")}</span>
+        <span className="fact"><Icon name="pin" size={15} /> {i.distance_label}، {i.travel.label.replace("حدود ", "")}</span>
         <span className="fact">
           <span className={"dot " + openTone(i.open_at_visit)} />
           <span className="ellipsis">{i.open_at_visit.label}</span>
@@ -285,7 +290,7 @@ export function ShopCard({ i, rank, why, pick, selected, onToggle, onOpen, onOpe
           <span className="grow">
             {i.open_at_visit.state === "closed" ? "بسته است؛ " : "ساعت کاری نامعلوم؛ "}
             جایگزین باز: <b>{i.alt_open.name}</b> {i.alt_open.same_mall ? "در همین پاساژ" : `، ${i.alt_open.distance_label} آن‌طرف‌تر`}
-            {i.alt_open.price ? ` · ${short(i.alt_open.price)} تومان` : ""}
+            {i.alt_open.price ? `، ${short(i.alt_open.price)} تومان` : ""}
           </span>
           <Icon name="left" size={15} />
         </button>
@@ -294,7 +299,7 @@ export function ShopCard({ i, rank, why, pick, selected, onToggle, onOpen, onOpe
       {(i.badges.length > 0) && (
         <div className="reasons">
           {i.badges.map((b) => (
-            <span key={b.label} className={"pill " + (b.kind === "installment" ? "green" : b.kind === "torobpay" ? "brand" : b.kind === "verified" ? "blue" : "")}>{b.label}</span>
+            <span key={b.label} className={"pill " + BADGE_TONE[b.kind]}>{b.label}</span>
           ))}
         </div>
       )}

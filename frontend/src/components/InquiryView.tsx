@@ -7,8 +7,8 @@ import { Img, availability, } from "./Products";
 import { ShopCard, freshTone } from "./ShopsView";
 
 const OUTCOME: Record<Reply["outcome"], { label: string; tone: string; icon: string }> = {
-  confirmed: { label: "موجود · قیمت تأیید شد", tone: "green", icon: "check" },
-  price_changed: { label: "موجود · قیمت تغییر کرده", tone: "amber", icon: "refresh" },
+  confirmed: { label: "موجود، قیمت تأیید شد", tone: "green", icon: "check" },
+  price_changed: { label: "موجود، قیمت تغییر کرده", tone: "amber", icon: "refresh" },
   out_of_stock: { label: "ناموجود", tone: "red", icon: "x" },
   no_answer: { label: "بی‌پاسخ", tone: "gray", icon: "hourglass" },
   closed: { label: "بسته بود، جواب نداد", tone: "gray", icon: "clock" },
@@ -96,6 +96,8 @@ export function InquiryView({ st, setSt, ctx, demo, onOpenShop, onVisit, onResta
         <span>{(st.started ? st.notice : preview?.notice) || "پاسخ فروشگاه‌ها شبیه‌سازی می‌شود."}</span>
       </div>
 
+      {!st.started && <img className="art-banner" src="/img/inquiry.webp" alt="" style={{ aspectRatio: "2 / 1" }} />}
+
       {!st.started && (
         <div className="card pad stack">
           <div className="bold">دستیار این پیام را برای {fa(st.sids.length)} فروشگاه می‌فرستد</div>
@@ -125,7 +127,7 @@ export function InquiryView({ st, setSt, ctx, demo, onOpenShop, onVisit, onResta
             <div className="row">
               <button className="grow" style={{ textAlign: "right" }} onClick={() => onOpenShop(s.sid)}>
                 <div className="bold">{s.name}</div>
-                <div className="tiny muted">{s.distance_label} · {s.open_now.label}</div>
+                <div className="tiny muted">{s.distance_label}، {s.open_now.label}</div>
               </button>
               <div style={{ textAlign: "left" }}>
                 <div className="tiny muted">ثبت‌شده</div>

@@ -407,8 +407,8 @@ def _pref_detail(changed: dict) -> str:
     if "budget_max" in changed:
         if changed["budget_max"]:
             lo = changed.get("budget_min")
-            rng = f"{fa_digits(f'{lo:,}'.replace(',', '٬'))} تا " if lo else "تا "
-            parts.append(f"بودجه {rng}{fa_digits(f'{changed['budget_max']:,}'.replace(',', '٬'))} تومان")
+            rng = f"{fa_digits(f'{lo:,}'.replace(',', '٫'))} تا " if lo else "تا "
+            parts.append(f"بودجه {rng}{fa_digits(f'{changed['budget_max']:,}'.replace(',', '٫'))} تومان")
         else:
             parts.append("بدون سقف بودجه")
     if "installments_only" in changed:

@@ -4,6 +4,7 @@ import { CompareSheet, ProductSheet } from "./components/Products";
 import { AboutSheet } from "./components/AboutSheet";
 import { ContextBar } from "./components/ContextBar";
 import { DesktopAside } from "./components/DesktopAside";
+import { RadishLogo } from "./components/Logo";
 import { AgentBlock, Feed } from "./components/Feed";
 import { InquiryView, type InquiryState } from "./components/InquiryView";
 import { ShopSheet } from "./components/ShopSheet";
@@ -256,10 +257,11 @@ export default function App() {
       <DesktopAside />
       <header className="top">
         <div className="brandrow">
-          <div className="logo"><Icon name="bag" size={19} /></div>
-          <div>
-            <div className="brandname">بازارگرد</div>
-            <div className="brandsub">دستیار خرید حضوری روی دادهٔ ترب</div>
+          <div className="wordmark">
+            <RadishLogo size={30} />
+            <b>ترب</b>
+            <i className="sep" />
+            <span>خرید حضوری</span>
           </div>
           <div className="spacer" />
           {meta && !meta.llm.available && <span className="pill amber">حالت ساده</span>}
@@ -368,9 +370,8 @@ export default function App() {
               </form>
             </div>
           ) : (
-            <button className="btn dark" onClick={() => setAskOpen(true)}
-              style={{ position: "fixed", zIndex: 27, bottom: 84, left: "max(12px, calc(50vw - 228px))", borderRadius: 999, boxShadow: "0 6px 18px rgba(0,0,0,.25)" }}>
-              <Icon name="spark" size={16} /> بپرس
+            <button className="btn blue fab" onClick={() => setAskOpen(true)}>
+              <Icon name="spark" size={16} /> از دستیار بپرس
             </button>
           )}
         </>

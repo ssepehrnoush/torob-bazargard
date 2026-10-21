@@ -34,7 +34,7 @@ def fa_text(text: str | None) -> str:
     def num(m: re.Match) -> str:
         raw = m.group().replace(",", "")
         if "." not in raw and len(raw) >= 5:
-            raw = f"{int(raw):,}".replace(",", "٬")
+            raw = f"{int(raw):,}".replace(",", "٫")
         return fa_digits(raw.replace(".", "٫"))
 
     return _NUM.sub(num, text).replace(" — ", "، ").replace("—", "، ")
@@ -128,7 +128,7 @@ def open_status(shifts: list[Shift] | None, has_hours: bool, at: datetime) -> di
         when = f"فردا {hhmm(minute)}"
     else:
         when = f"{DAY_FA[dow]} {hhmm(minute)}"
-    return {"state": "closed", "label": f"بسته است · باز می‌شود {when}", "closes_in_min": None,
+    return {"state": "closed", "label": f"بسته است، باز می‌شود {when}", "closes_in_min": None,
             "opens_in_min": delta, "opens_at": when}
 
 

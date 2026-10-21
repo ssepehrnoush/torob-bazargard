@@ -2,6 +2,7 @@ import { useState } from "react";
 import { fa } from "../fmt";
 import { Icon } from "../icons";
 import type { Ctx, FeedItem, Meta, ProductCard as PC, Question } from "../types";
+import { RadishLogo } from "./Logo";
 import { ProductCard } from "./Products";
 
 const EXAMPLES = [
@@ -31,6 +32,8 @@ export function Feed({ items, meta, stale, onRefresh, ...h }: Handlers & { items
   return (
     <>
       <div className="card hero">
+        <img className="art" src="/img/hero.webp" alt="" style={{ height: 190, objectPosition: "50% 45%" }} />
+        <div className="copy">
         <h1>چی می‌خوای بخری؟</h1>
         <p>بگو دنبال چی هستی، حتی اگه مدلش رو نمی‌دونی. کمکت می‌کنم انتخاب کنی، نزدیک‌ترین و به‌صرفه‌ترین فروشگاه رو پیدا کنی و قبل از رفتن قیمت و موجودی رو چک کنی.</p>
         <div className="examples">
@@ -43,9 +46,10 @@ export function Feed({ items, meta, stale, onRefresh, ...h }: Handlers & { items
         <div className="datanote">
           <Icon name="info" size={15} style={{ marginTop: 3, flex: "none" }} />
           <span>
-            روی دادهٔ واقعی ترب: {fa((meta?.counts?.shops ?? 6476).toLocaleString("en-US")).replace(/,/g, "٬")} فروشگاه حضوری تهران و{" "}
-            {fa((meta?.counts?.products ?? 225903).toLocaleString("en-US")).replace(/,/g, "٬")} کالا. قیمت‌ها «ثبت‌شده» هستند و تا استعلام نگیریم قطعی نیستند.
+            از بین {fa((meta?.counts?.shops ?? 6476).toLocaleString("en-US")).replace(/,/g, "٫")} فروشگاه حضوری تهران و{" "}
+            {fa((meta?.counts?.products ?? 225903).toLocaleString("en-US")).replace(/,/g, "٫")} کالا. قیمت‌ها «ثبت‌شده» هستند و تا استعلام نگیریم قطعی نیستند.
           </span>
+        </div>
         </div>
       </div>
       {items.map((it) =>
@@ -70,9 +74,9 @@ export function AgentBlock({ it, ...h }: Handlers & { it: AgentItem }) {
   return (
     <div className="agent fadein">
       <div className="agenthead">
-        <span className="avatar"><Icon name="spark" size={14} /></span>
-        <span>بازارگرد</span>
-        {it.elapsed != null && <span className="tiny">· {fa(it.elapsed.toFixed(1)).replace(".", "٫")} ثانیه</span>}
+        <span className="avatar"><RadishLogo size={17} /></span>
+        <span>دستیار خرید حضوری</span>
+        {it.elapsed != null && <span className="tiny">({fa(it.elapsed.toFixed(1)).replace(".", "٫")} ثانیه)</span>}
       </div>
       {it.steps.length > 0 && (
         <div className="steps">

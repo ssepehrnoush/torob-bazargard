@@ -92,7 +92,7 @@ def freshness(ts: int | None, now: datetime | None = None) -> dict:
     else:
         tier, word = "stale", "قدیمی؛ حتماً استعلام بگیرید"
     when = "امروز" if days == 0 else f"{fa_digits(days)} روز پیش"
-    return {"tier": tier, "days": days, "ts": ts, "label": f"قیمت ثبت‌شده {when} · {word}"}
+    return {"tier": tier, "days": days, "ts": ts, "label": f"قیمت ثبت‌شده {when}، {word}"}
 
 
 # ---------------------------------------------------------------------------------------

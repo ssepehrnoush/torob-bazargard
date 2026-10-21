@@ -32,7 +32,7 @@ def test_open_status_unknown_and_overnight():
 
 def test_fa_text_formats_numbers_but_keeps_model_names():
     out = fa_text("قیمت 5190000 تومان — گوشی A55 و 2.5 کیلو")
-    assert "۵٬۱۹۰٬۰۰۰" in out and "A55" in out and "۲٫۵" in out and "—" not in out
+    assert "۵٫۱۹۰٫۰۰۰" in out and "A55" in out and "۲٫۵" in out and "—" not in out
 
 
 def test_travel_estimate_walk_vs_car():

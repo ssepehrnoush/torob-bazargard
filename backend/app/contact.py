@@ -27,7 +27,7 @@ ODDS = {  # by price freshness tier
 
 
 def toman_fa(v: int) -> str:
-    return fa_digits(f"{v:,}").replace(",", "٬")
+    return fa_digits(f"{v:,}").replace(",", "٫")
 
 
 def draft_message(product_title: str, price: int | None, ctx: Ctx, shop_name: str) -> str:

@@ -2,6 +2,7 @@ import qrcode from "qrcode-generator";
 import { useMemo } from "react";
 import { fa } from "../fmt";
 import { Icon } from "../icons";
+import { RadishLogo } from "./Logo";
 
 const STEPS: [string, string, string][] = [
   ["spark", "انتخاب کالا", "اگر مدل را نمی‌دانید، با چند گزینهٔ آماده می‌پرسد و با دلیل پیشنهاد می‌دهد"],
@@ -19,13 +20,12 @@ export function DesktopAside() {
     return qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
   }, []);
   return (
-    <aside className="aside" aria-label="دربارهٔ بازارگرد">
-      <div className="row" style={{ gap: 10 }}>
-        <div className="logo"><Icon name="bag" size={19} /></div>
-        <div>
-          <div className="brandname">بازارگرد</div>
-          <div className="brandsub">دستیار هوشمند خرید حضوری روی دادهٔ ترب</div>
-        </div>
+    <aside className="aside" aria-label="دربارهٔ خرید حضوری ترب">
+      <div className="wordmark">
+        <RadishLogo size={34} />
+        <b>ترب</b>
+        <i className="sep" />
+        <span>خرید حضوری</span>
       </div>
       <p className="small" style={{ margin: 0 }}>
         از «چی بخرم؟» تا «کدوم مغازه، کی، از کدوم در پاساژ». برای گوشی طراحی شده؛ با دوربین گوشی اسکن کنید.

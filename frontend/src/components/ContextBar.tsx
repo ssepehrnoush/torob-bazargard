@@ -17,7 +17,7 @@ export function ContextBar({ ctx, setCtx, meta, toast }: Props) {
       <div className="ctxbar">
         <button className="chip" onClick={() => setOpen("place")}>
           <Icon name="pin" size={15} />
-          {ctx.place.split(" (")[0]} <small>· {fa(ctx.radius_km)} کیلومتر</small>
+          {ctx.place.split(" (")[0]} <small>تا {fa(ctx.radius_km)} کیلومتر</small>
         </button>
         <button className="chip" onClick={() => setOpen("visit")}>
           <Icon name="clock" size={15} />

@@ -50,7 +50,7 @@ export function VisitView({ pid, sids, confirmed, ctx, onOpenShop, toast }: {
       <div className="card pad row between">
         <div>
           <div className="bold">برنامهٔ مراجعه</div>
-          <div className="small muted">{fa(plan.stops.length)} فروشگاه · حدود {fa(plan.total_minutes)} دقیقه · {fa(plan.total_km)} کیلومتر</div>
+          <div className="small muted">{fa(plan.stops.length)} فروشگاه، حدود {fa(plan.total_minutes)} دقیقه، {fa(plan.total_km)} کیلومتر</div>
         </div>
         <button className="btn sm secondary" onClick={share}><Icon name="share" size={15} /> ارسال</button>
       </div>
@@ -71,7 +71,7 @@ export function VisitView({ pid, sids, confirmed, ctx, onOpenShop, toast }: {
           <div className="tstop" key={s.sid}>
             <span className="tnum">{fa(i + 1)}</span>
             <div className="grow stack" style={{ gap: 6 }}>
-              <div className="tiny muted">{s.leg.label} · رسیدن حدود {s.arrive_label}</div>
+              <div className="tiny muted">{s.leg.label}، رسیدن حدود {s.arrive_label}</div>
               <button className="bold" style={{ textAlign: "right" }} onClick={() => onOpenShop(s.sid)}>{s.name}</button>
               {s.mall && <div className="small muted">{s.mall}</div>}
               <div className="row wrap" style={{ gap: 4 }}>

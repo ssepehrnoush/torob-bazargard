@@ -28,8 +28,9 @@ HACKATHON = ROOT.parent
 API = "https://api.iran.liara.ir"
 APP = os.environ.get("LIARA_APP", "bazargard")
 PLAN = os.environ.get("LIARA_PLAN", "small-g2")
-BUNDLE = os.environ.get("LIARA_BUNDLE", "basic")
+BUNDLE = os.environ.get("LIARA_BUNDLE", "standard")  # basic allows only a 5-minute build
 PORT = 8000
+TEAM = os.environ.get("LIARA_TEAM_ID", "6ad4685525646e1982f75717")  # hackathon credit sits on the team
 
 INCLUDE = [
     "Dockerfile", ".dockerignore", "liara.json",
@@ -59,6 +60,8 @@ TOKEN = ENV.get("LIARA_API_TOKEN", "")
 def call(method: str, path: str, body: dict | None = None, raw: bytes | None = None,
          ctype: str = "application/json", timeout: int = 60):
     data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
+    if TEAM:
+        path += ("&" if "?" in path else "?") + f"teamID={TEAM}"
     req = urllib.request.Request(API + path, data=data, method=method,
                                  headers={"Authorization": f"Bearer {TOKEN}", "Content-Type": ctype})
     try:
@@ -74,9 +77,10 @@ def call(method: str, path: str, body: dict | None = None, raw: bytes | None = N
 
 
 def balance() -> float | None:
-    st, b = call("GET", "/v1/billing")
+    st, b = call("GET", "/v1/me")
     if st == 200 and isinstance(b, dict):
-        return float(b.get("user", {}).get("balance", 0))
+        owner = b.get("team") or b.get("user") or {}
+        return float(owner.get("balance", 0))
     return None
 
 
@@ -149,7 +153,11 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--create", action="store_true")
+    ap.add_argument("--follow", help="only follow the build logs of this release id")
     a = ap.parse_args()
+    if a.follow:
+        follow(a.follow)
+        return
     if not TOKEN:
         sys.exit("LIARA_API_TOKEN missing")
     bal = balance()
@@ -160,8 +168,12 @@ def main() -> None:
     if not proj:
         if not a.create:
             sys.exit("app does not exist; run with --create (this starts hourly billing)")
-        st, d = call("POST", "/v1/projects", {"name": APP, "planID": PLAN, "platform": "docker",
-                                              "bundlePlanID": BUNDLE, "readOnlyRootFilesystem": False})
+        body = {"name": APP, "planID": PLAN, "platform": "docker", "bundlePlanID": BUNDLE,
+                "readOnlyRootFilesystem": False}
+        st, nets = call("GET", "/v1/networks")  # g2 plans need a private network
+        if st == 200 and isinstance(nets, dict) and nets.get("networks"):
+            body["network"] = nets["networks"][0]["_id"]
+        st, d = call("POST", "/v1/projects", body)
         print("create:", st, d if st != 200 else "ok")
         if st not in (200, 201):
             sys.exit(1)
@@ -170,10 +182,10 @@ def main() -> None:
     print(f"source: {len(blob) / 1048576:.1f} MB")
     body, ctype = multipart("file", "source.tar.gz", blob)
     st, d = call("POST", f"/v2/projects/{APP}/sources", raw=body, ctype=ctype, timeout=900)
-    if st != 200 or not isinstance(d, dict) or not d.get("sourceID"):
+    if st not in (200, 201) or not isinstance(d, dict) or not d.get("sourceID"):
         sys.exit(f"upload failed: {st} {str(d)[:300]}")
     st, d = call("POST", f"/v2/projects/{APP}/releases", {"sourceID": d["sourceID"], "port": PORT, "type": "docker"})
-    if st != 200 or not isinstance(d, dict) or not d.get("releaseID"):
+    if st not in (200, 201) or not isinstance(d, dict) or not d.get("releaseID"):
         sys.exit(f"release failed: {st} {str(d)[:300]}")
     print("release:", d["releaseID"])
     follow(d["releaseID"])

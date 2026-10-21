@@ -1,10 +1,10 @@
-import { fa, num } from "../fmt";
+import { num } from "../fmt";
 import { Icon } from "../icons";
 import type { Meta } from "../types";
 import { Sheet } from "./Sheet";
 
 const LABELS: [string, string, string][] = [
-  ["green", "قیمت ثبت‌شده · اخیر", "آخرین تغییر قیمت در ترب کمتر از ۱۵ روز پیش بوده"],
+  ["green", "قیمت ثبت‌شده، اخیر", "آخرین تغییر قیمت در ترب کمتر از ۱۵ روز پیش بوده"],
   ["amber", "ممکن است تغییر کرده باشد", "۱۵ تا ۴۵ روز از آخرین تغییر قیمت گذشته"],
   ["red", "قدیمی", "بیش از ۴۵ روز؛ حتماً قبل از رفتن استعلام بگیرید"],
   ["gray", "موجودی تأیید نشده", "ترب فقط قیمت ثبت‌شده را دارد؛ موجودی فقط با استعلام معلوم می‌شود"],
@@ -14,7 +14,7 @@ export function AboutSheet({ meta, onClose }: { meta: Meta | null; onClose: () =
   const c = meta?.counts ?? {};
   const snap = meta?.snapshot ? new Intl.DateTimeFormat("fa-IR-u-ca-persian", { day: "numeric", month: "long", year: "numeric" }).format(new Date(meta.snapshot)) : "";
   return (
-    <Sheet title="بازارگرد چطور کار می‌کند" onClose={onClose}>
+    <Sheet title="خرید حضوری ترب چطور کار می‌کند" onClose={onClose}>
       <div className="card pad stack">
         <div className="bold">داده</div>
         <div className="small">
@@ -58,7 +58,6 @@ export function AboutSheet({ meta, onClose }: { meta: Meta | null; onClose: () =
           </div>
         )}
       </div>
-      <div className="tiny muted" style={{ textAlign: "center" }}>ساخته‌شده برای چالش ترب در هکاتون Agentic AI استارکوچ · نسخهٔ {fa("1.0")}</div>
     </Sheet>
   );
 }

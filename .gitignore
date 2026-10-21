@@ -14,3 +14,6 @@ app-data/
 deploy/dataset.zip
 deploy/*.tar.gz
 .claude/
+
+# commercial font licensed to Torob: used for the demo deploy only, never committed
+frontend/public/fonts/IRANYekan*

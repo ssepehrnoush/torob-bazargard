@@ -4,7 +4,7 @@ import { fa, jalali, toman } from "../fmt";
 import { Icon } from "../icons";
 import type { Ctx, MallGuide, ShopDetail } from "../types";
 import { Sheet } from "./Sheet";
-import { freshTone, openTone } from "./ShopsView";
+import { BADGE_TONE, freshTone, openTone } from "./ShopsView";
 
 const GUIDE_ICON: Record<string, string> = { building: "building", floor: "floor", door: "door", pin: "pin", help: "help" };
 
@@ -57,7 +57,7 @@ export function ShopSheet({ sid, pid, ctx, onClose, onInquiry, onVisit, onOpenSh
             )}
             <div className="row wrap" style={{ gap: 4 }}>
               {d.badges.map((b) => (
-                <span key={b.label} className={"pill " + (b.kind === "installment" ? "green" : b.kind === "verified" ? "blue" : "brand")}>{b.label}</span>
+                <span key={b.label} className={"pill " + BADGE_TONE[b.kind]}>{b.label}</span>
               ))}
               {!d.installments.length && <span className="pill">خرید قسطی ثبت نشده</span>}
             </div>

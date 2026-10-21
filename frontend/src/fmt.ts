@@ -5,10 +5,10 @@ export function fa(v: string | number | null | undefined): string {
   return String(v).replace(/[0-9]/g, (d) => FA[+d]);
 }
 
-/** 12500000 -> "۱۲٬۵۰۰٬۰۰۰" */
+/** 12500000 -> "۱۲٫۵۰۰٫۰۰۰" */
 export function num(v: number | null | undefined): string {
   if (v === null || v === undefined) return "";
-  return fa(Math.round(v).toLocaleString("en-US")).replace(/,/g, "٬");
+  return fa(Math.round(v).toLocaleString("en-US")).replace(/,/g, "٫"); // torob writes ۲۳٫۷۰۰٫۰۰۰
 }
 
 export function toman(v: number | null | undefined): string {
