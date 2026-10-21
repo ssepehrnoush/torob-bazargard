@@ -8,17 +8,18 @@ export const MODE_ICON: Record<string, string> = { walk: "walk", car: "car", tra
 /** "باز تا ۲۱:۰۰" in green, "بسته" in red, «ساعت کاری ثبت نشده» in grey: same words everywhere. */
 export function OpenText({ s }: { s: OpenState }) {
   if (s.state === "open") return <span className="open-txt">{s.closes_at ? `باز تا ${s.closes_at}` : "باز"}</span>;
-  if (s.state === "closed") return <span className="closed-txt">{s.opens_at ? `بسته، باز می‌شود ${s.opens_at}` : "بسته"}</span>;
+  if (s.state === "closed") return <span className="closed-txt">{s.opens_at ? `بسته تا ${s.opens_at}` : "بسته"}</span>;
   return <span className="muted">ساعت کاری ثبت نشده</span>;
 }
 
-/** One short travel line for a list row: "۴۶ دقیقه · خط ۱" for metro, "۱۵ دقیقه پیاده", "۱۲ دقیقه با ماشین". */
-export function TravelInline({ t }: { t: Travel }) {
+/** One short travel line: "۱۰ دقیقه", plus the metro line badge; says «پیاده» or «با ماشین» only when that differs
+    from the mode the user chose (the header chip already shows it). */
+export function TravelInline({ t, userMode, icon = true }: { t: Travel; userMode?: string; icon?: boolean }) {
   const metro = t.legs?.find((l) => l.mode === "metro");
-  const how = t.mode === "walk" ? "پیاده" : t.mode === "car" ? "با ماشین" : "";
+  const how = t.mode === userMode ? "" : t.mode === "walk" ? "پیاده" : t.mode === "car" ? "با ماشین" : "";
   return (
     <span className="travel-inline">
-      <Icon name={MODE_ICON[t.mode] ?? "route"} size={15} />
+      {icon && <Icon name={MODE_ICON[t.mode] ?? "route"} size={15} />}
       {fa(t.minutes)} دقیقه{how ? ` ${how}` : ""}
       {metro && <i className="line-dot" style={{ background: metroColor(metro.line) }}>{metro.line?.replace("خط ", "")}</i>}
     </span>

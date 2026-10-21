@@ -35,6 +35,18 @@ export function ctxChanges(a: Ctx, b: Ctx, meta: Meta | null): string[] {
   return out;
 }
 
+/** «فردا صبح، تا ۲۰۰ میلیون، فقط قسطی»: the active filters in words. */
+export function filterSummary(ctx: Ctx, meta: Meta | null): string {
+  const out: string[] = [];
+  if (ctx.visit !== "now") out.push(meta?.visit_presets?.[ctx.visit] ?? ctx.visit);
+  if (ctx.budget_max) out.push(`تا ${short(ctx.budget_max)}`);
+  if (ctx.installments_only) out.push("فقط قسطی");
+  if (ctx.originality === "original_only") out.push("فقط کالای اصل");
+  if (ctx.open_only) out.push("فقط باز");
+  if (ctx.torob_pay_only) out.push("فقط ترب‌پی");
+  return out.join("، ");
+}
+
 /** Header chip, read as one phrase: «از فردوسی / تا ۲۰ دقیقه», with the travel mode as its icon. */
 export function PlaceChip({ ctx, onOpen }: { ctx: Ctx; onOpen: () => void }) {
   return (
@@ -44,11 +56,12 @@ export function PlaceChip({ ctx, onOpen }: { ctx: Ctx; onOpen: () => void }) {
         <b className="ellipsis">از {shortPlace(ctx.place)}</b>
         <small>تا {rangeText(ctx)}</small>
       </span>
+      {activeFilters(ctx) > 0 && <i className="pc-dot" aria-hidden="true" />}
     </button>
   );
 }
 
-export function RouteSheet({ ctx, setCtx, meta, toast, onClose }: { ctx: Ctx; setCtx: (c: Ctx) => void; meta: Meta | null; toast: (s: string) => void; onClose: () => void }) {
+export function RouteSheet({ ctx, setCtx, meta, toast, onClose, onFilters }: { ctx: Ctx; setCtx: (c: Ctx) => void; meta: Meta | null; toast: (s: string) => void; onClose: () => void; onFilters: () => void }) {
   const [allPlaces, setAllPlaces] = useState(false);
   const places = meta?.places ?? [];
   const modes = (meta?.travel_modes ?? MODES) as Record<TravelMode, string>;
@@ -71,6 +84,15 @@ export function RouteSheet({ ctx, setCtx, meta, toast, onClose }: { ctx: Ctx; se
   };
   return (
     <Sheet title="از کجا و چطور می‌روید؟" onClose={onClose} footer={<button className="btn block" onClick={onClose}>نمایش نتیجه</button>}>
+      <button className="card filtersrow" onClick={onFilters}>
+        <Icon name="filter" size={20} />
+        <span className="grow">
+          <b>فیلترها</b>
+          <span className="meta">{filterSummary(ctx, meta) || "زمان رفتن، بودجه، قسطی، فقط کالای اصل"}</span>
+        </span>
+        {activeFilters(ctx) > 0 && <i className="count">{fa(activeFilters(ctx))}</i>}
+        <Icon name="left" size={16} className="faint" />
+      </button>
       <section className="sec">
         <h3>چطور می‌روید؟</h3>
         <div className="segmented three">
@@ -133,17 +155,6 @@ export function RouteSheet({ ctx, setCtx, meta, toast, onClose }: { ctx: Ctx; se
         </div>
       </section>
     </Sheet>
-  );
-}
-
-/** Filter icon in the header with a count; opens everything that narrows results. */
-export function FiltersButton({ ctx, onOpen }: { ctx: Ctx; onOpen: () => void }) {
-  const n = activeFilters(ctx);
-  return (
-    <button className={"iconbtn" + (n ? " on" : "")} onClick={onOpen} aria-label={n ? `فیلترها، ${fa(n)} فعال` : "فیلترها"}>
-      <Icon name="filter" size={21} />
-      {n > 0 && <i className="count">{fa(n)}</i>}
-    </button>
   );
 }
 

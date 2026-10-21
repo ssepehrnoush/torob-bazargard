@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { get, stream } from "./api";
 import { CompareSheet, ProductSheet } from "./components/Products";
 import { AboutSheet } from "./components/AboutSheet";
-import { ctxChanges, FiltersButton, FiltersSheet, PlaceChip, RouteSheet } from "./components/ContextBar";
+import { ctxChanges, FiltersSheet, PlaceChip, RouteSheet } from "./components/ContextBar";
 import { DesktopAside } from "./components/DesktopAside";
 import { RadishLogo } from "./components/Logo";
 import { AgentBlock, Feed, Home, type FeedHandlers } from "./components/Feed";
@@ -346,7 +346,6 @@ export default function App() {
           </div>
           <div className="spacer" />
           <PlaceChip ctx={ctx} onOpen={() => setSheet({ kind: "route" })} />
-          <FiltersButton ctx={ctx} onOpen={() => setSheet({ kind: "filters" })} />
           <button className="iconbtn" onClick={() => setSheet({ kind: "about" })} aria-label="دربارهٔ داده و روش کار">
             <Icon name="info" size={21} />
           </button>
@@ -359,7 +358,6 @@ export default function App() {
                 {s.label}
               </button>
             ))}
-            <button className="jreset" onClick={reset} disabled={busy} aria-label="شروع دوباره"><Icon name="refresh" size={18} /></button>
           </nav>
         )}
       </header>
@@ -465,7 +463,7 @@ export default function App() {
         </>
       )}
 
-      {sheet?.kind === "route" && <RouteSheet ctx={ctx} setCtx={setCtx} meta={meta} toast={toast} onClose={() => setSheet(null)} />}
+      {sheet?.kind === "route" && <RouteSheet ctx={ctx} setCtx={setCtx} meta={meta} toast={toast} onClose={() => setSheet(null)} onFilters={() => setSheet({ kind: "filters" })} />}
       {sheet?.kind === "filters" && <FiltersSheet ctx={ctx} setCtx={setCtx} meta={meta} onClose={() => setSheet(null)} />}
       {sheet?.kind === "shop" && (
         <ShopSheet sid={sheet.sid} auth={sheet.auth} pid={step === "visit" ? visit?.pid ?? pid : step === "inquiry" ? inq?.pid ?? pid : pid} ctx={ctx}

@@ -84,13 +84,12 @@ export function VisitView({ pid, sids, confirmed, ctx, onOpenShop, toast }: {
                   : s.price ? <span className="meta">ثبت‌شده {toman(s.price)}</span> : null}
               </div>
               {s.hold_until && <div className="meta blue-txt">تا {s.hold_until} برایتان نگه می‌دارند</div>}
-              <div className="meta">{s.leg.label}</div>
               {s.leg.legs && s.leg.legs.length > 1 && <MetroStrip legs={s.leg.legs} />}
-              {s.guide.length > 1 && <div className="meta">{s.guide.slice(1, 3).map((g) => g.text.split(" (")[0]).join("، ")}</div>}
+              {s.guide.length > 1 && <div className="meta ellipsis">{s.guide.slice(1, 2).map((g) => g.text.split(" (")[0]).join("")}</div>}
               <div className="navbtns">
                 <a className="btn ghost sm" href={s.nav.neshan} target="_blank" rel="noreferrer"><Icon name="nav" size={15} /> مسیریابی با نشان</a>
-                <a className="btn ghost sm" href={s.nav.balad} target="_blank" rel="noreferrer">بلد</a>
-                <a className="btn ghost sm" href={s.nav.google} target="_blank" rel="noreferrer">گوگل‌مپ</a>
+                <a className="textbtn" href={s.nav.balad} target="_blank" rel="noreferrer">بلد</a>
+                <a className="textbtn" href={s.nav.google} target="_blank" rel="noreferrer">گوگل‌مپ</a>
               </div>
             </div>
           </div>

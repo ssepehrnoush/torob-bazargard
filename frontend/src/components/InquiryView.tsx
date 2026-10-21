@@ -184,7 +184,7 @@ export function InquiryView({ st, setSt, ctx, demo, onOpenShop, onVisit, onResta
               <div className="listhead"><h3>جایگزین‌های آماده</h3><span className="meta">برای فروشگاه‌هایی که جواب ندادند یا نداشتند</span></div>
               <div className="card sellers">
                 {sum.alternatives.map((a) => (
-                  <SellerRow key={a.sid} i={a} cheapest={false} selected={false} onToggle={() => onRestart([a.sid])} onOpen={() => onOpenShop(a.sid, a)} />
+                  <SellerRow key={a.sid} i={a} cheapest={false} selected={false} userMode={ctx.travel_mode} onToggle={() => onRestart([a.sid])} onOpen={() => onOpenShop(a.sid, a)} />
                 ))}
               </div>
               <button className="btn ghost block" onClick={() => onRestart(sum.alternatives.map((a) => a.sid))}>

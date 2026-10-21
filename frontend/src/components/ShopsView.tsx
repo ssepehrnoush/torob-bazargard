@@ -105,8 +105,7 @@ export function ShopsView({ pid, ctx, setCtx, picks, agentMsg, focus, onOpenShop
     touched.current = true;
     setSel((s) => (s.includes(sid) ? s.filter((x) => x !== sid) : s.length >= 5 ? s : [...s, sid]));
   };
-  // Car trips into central Tehran mostly hit the traffic zone: say it once above the list, not on every row.
-  const zoneWarning = near.find((i) => i.travel.warning)?.travel.warning;
+
   const p = data?.product;
   const rangeLabel = data?.range?.label ?? "";
 
@@ -130,9 +129,9 @@ export function ShopsView({ pid, ctx, setCtx, picks, agentMsg, focus, onOpenShop
       {bargain && <BargainCard b={bargain} onOpen={() => reveal(bargain.sid)} />}
 
       <div className="toolbar">
-        <div className="chips nowrap" role="tablist" aria-label="مرتب‌سازی">
+        <div className="sortseg" role="tablist" aria-label="مرتب‌سازی">
           {SORTS.map(([k, l]) => (
-            <button key={k} role="tab" aria-selected={sort === k} className={"chip" + (sort === k ? " dark" : "")} onClick={() => setSort(k)}>{l}</button>
+            <button key={k} role="tab" aria-selected={sort === k} className={sort === k ? "on" : ""} onClick={() => setSort(k)}>{l}</button>
           ))}
         </div>
         <button className="mapbtn iconchip" onClick={() => setView(view === "map" ? "list" : "map")} aria-pressed={view === "map"}>
@@ -168,7 +167,6 @@ export function ShopsView({ pid, ctx, setCtx, picks, agentMsg, focus, onOpenShop
         <div className="listhead">
           <h3>{fa(near.length)} فروشگاه {rangeLabel || "نزدیک شما"}</h3>
           <span className="meta"><Icon name="info" size={13} /> قیمت ثبت‌شده در ترب؛ موجودی تا استعلام تأیید نشده</span>
-          {zoneWarning && <span className="warnline"><Icon name="car" size={14} /> {zoneWarning}</span>}
         </div>
       )}
 
@@ -196,7 +194,7 @@ export function ShopsView({ pid, ctx, setCtx, picks, agentMsg, focus, onOpenShop
       {near.length > 0 && (
         <div className="card sellers">
           {near.map((i) => (
-            <SellerRow key={i.sid} i={i} why={pickWhy[i.sid]} cheapest={i.sid === cheapest} flash={flash === i.sid}
+            <SellerRow key={i.sid} i={i} why={pickWhy[i.sid]} cheapest={i.sid === cheapest} flash={flash === i.sid} userMode={ctx.travel_mode}
               selected={sel.includes(i.sid)} onToggle={() => toggle(i.sid)} onOpen={() => onOpenShop(i.sid, i)} onOpenAlt={(sid) => onOpenShop(sid)} />
           ))}
         </div>
@@ -211,7 +209,7 @@ export function ShopsView({ pid, ctx, setCtx, picks, agentMsg, focus, onOpenShop
       {showFar && far.length > 0 && (
         <div className="card sellers">
           {far.map((i) => (
-            <SellerRow key={i.sid} i={i} why={pickWhy[i.sid]} cheapest={false} flash={flash === i.sid}
+            <SellerRow key={i.sid} i={i} why={pickWhy[i.sid]} cheapest={false} flash={flash === i.sid} userMode={ctx.travel_mode}
               selected={sel.includes(i.sid)} onToggle={() => toggle(i.sid)} onOpen={() => onOpenShop(i.sid, i)} onOpenAlt={(sid) => onOpenShop(sid)} />
           ))}
         </div>
@@ -262,18 +260,21 @@ export function ShopsView({ pid, ctx, setCtx, picks, agentMsg, focus, onOpenShop
   );
 }
 
-/** Torob's in-store seller row: name and price, place and price age, travel and opening state, then badges. */
-export function SellerRow({ i, why, cheapest, flash, selected, onToggle, onOpen, onOpenAlt }: {
+/** Torob's in-store seller row, two lines: name and price, then «۱۰ دقیقه · باز تا ۲۲:۰۰» and the price's age.
+    The passage, floor and payment options live in the shop sheet; only a warning or «ارزان‌ترین» earns a badge here. */
+export function SellerRow({ i, why, cheapest, flash, selected, userMode, onToggle, onOpen, onOpenAlt }: {
   i: ShopOffer;
   why?: string;
   cheapest: boolean;
   flash?: boolean;
   selected: boolean;
+  userMode?: string;
   onToggle: () => void;
   onOpen: () => void;
   onOpenAlt?: (sid: number) => void;
 }) {
   const aging = i.freshness.tier === "aging" || i.freshness.tier === "stale";
+  const warnAuth = i.authenticity?.status === "declared_copy" || i.authenticity?.status === "suspicious";
   return (
     <div id={`shop-${i.sid}`} className={"scard" + (selected ? " sel" : "") + (flash ? " flash" : "")}>
       <button className={"selbox" + (selected ? " on" : "")} onClick={onToggle} aria-pressed={selected} aria-label={`انتخاب ${i.name} برای استعلام`}>
@@ -286,17 +287,14 @@ export function SellerRow({ i, why, cheapest, flash, selected, onToggle, onOpen,
             <span className="amount">{i.price ? toman(i.price) : "بدون قیمت"}</span>
           </span>
           <span className="r2">
-            <span className="ellipsis">{i.mall || i.area || i.address}</span>
-            <span className={aging ? "amber-txt" : ""}>{i.freshness.days != null ? `ثبت ${fa(i.freshness.days)} روز پیش` : "زمان ثبت نامعلوم"}</span>
+            <span className="r2-info"><TravelInline t={i.travel} userMode={userMode} icon={false} /><i className="sep-dot" /><OpenText s={i.open_at_visit} /></span>
+            <span className={aging ? "amber-txt" : "faint"}>{i.freshness.days != null ? `ثبت ${fa(i.freshness.days)} روز پیش` : "زمان ثبت نامعلوم"}</span>
           </span>
-          <span className="r3">
-            <TravelInline t={i.travel} />
-            <OpenText s={i.open_at_visit} />
-            {cheapest && <span className="badge">ارزان‌ترین</span>}
-            <AuthBadge a={i.authenticity} />
-            {i.installments.length > 0 && <span className="tag blue">قسطی</span>}
-            {i.torob_pay && <span className="tag violet">ترب‌پی</span>}
-          </span>
+          {(cheapest || warnAuth) && (
+            <span className="r3">
+              {warnAuth ? <AuthBadge a={i.authenticity} /> : <span className="badge">ارزان‌ترین</span>}
+            </span>
+          )}
         </button>
         {why && <div className="whyline"><Icon name="spark" size={14} stroke={1.8} /> <span className="clamp2">{why}</span></div>}
         {i.price_warning && <div className="warnline red"><Icon name="alert" size={14} /> قیمت مشکوک؛ شاید کالای دیگری باشد</div>}
