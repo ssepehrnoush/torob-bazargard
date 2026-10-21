@@ -22,3 +22,6 @@ frontend/public/fonts/IRANYekan*
 STUDY-GUIDE.html
 NARRATION.html
 deploy/img-raw/
+
+# demo video build outputs (frames, voice clips, renders)
+_video/

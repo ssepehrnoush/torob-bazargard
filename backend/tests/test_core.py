@@ -118,3 +118,12 @@ def test_nav_links_open_the_route_from_the_user():
     assert "origin=51.4197,35.6998&destination=51.4339,35.8046" in links["balad"]  # Balad wants lon,lat
     assert "maps/dir/?api=1&origin=35.6998,51.4197" in links["google"] and links["google"].endswith("travelmode=transit")
     assert "search" in nav_links(35.8, 51.4, "x")["google"]  # no origin: just the place
+
+
+@needs_db
+def test_phone_query_with_feature_word_and_budget_finds_phones():
+    # «گوشی سامسونگ دوربین» used to return camera spare parts: phone titles never say «دوربین», and a budget
+    # left too few phones in the global top results to detect what the user means
+    for q in ("گوشی سامسونگ دوربین", "گوشی سامسونگ"):
+        items = catalog.search_products(q, Ctx(budget_max=200_000_000, installments_only=True))["items"]
+        assert items and all(i["category"] == "گوشی موبایل" for i in items)

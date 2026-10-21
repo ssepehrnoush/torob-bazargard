@@ -139,18 +139,29 @@ def search_products(query: str, ctx: Ctx, category: str | None = None, brand: st
     # Intent category: Persian titles lead with the product type, so the category most titles that
     # start with the query's head words belong to is what the user means ("گوشی سامسونگ" -> phones,
     # not the many cases whose titles merely mention the phone).
-    heads = Counter(r["category_name"] for r in rows if r["head_match"])
+    # Counted before the budget filter: for «گوشی سامسونگ» the global top 400 holds only a handful of phones
+    # among parts and cases, and a budget can leave just one of them.
+    heads = Counter(r["category_name"] for r in facets_rows if r["head_match"])
     intent = category
+    if not heads and not category and len(query.split()) > 1:
+        # nothing starts with the head word when a feature word is in the query («گوشی سامسونگ دوربین»: phone
+        # titles never say دوربین, so the AND search only finds camera parts); learn the type from the head alone
+        head_rows = _fts(db.normalize_fa(query).split()[0])
+        hc = Counter(r["category_name"] for r in head_rows if r["head_match"])
+        if hc and hc.most_common(1)[0][1] >= 5 and hc.most_common(1)[0][1] >= 0.6 * sum(hc.values()):
+            heads = Counter({hc.most_common(1)[0][0]: hc.most_common(1)[0][1]})
     if heads and not category:
         top_cat, n_top = heads.most_common(1)[0]
-        if n_top >= 2 and n_top >= 0.4 * sum(heads.values()):
+        if (n_top >= 2 and n_top >= 0.4 * sum(heads.values())) or n_top == sum(heads.values()):
             intent = top_cat
             # re-query inside that category: the global top 400 can be crowded out by accessories
             have = {x["pid"] for x in rows}
             rows = rows + [r for r in in_budget(_fts(query, intent)) if r["pid"] not in have]
             in_cat = [r for r in rows if r["category_name"] == intent]
-            if len(in_cat) >= 3:
+            if in_cat:
                 rows = in_cat
+            elif hi:
+                rows = []  # nothing of this type fits the budget: say so instead of offering its accessories
 
     def text_rank(r):
         boost = 1 + 0.15 * math.log1p(r["n_shops"] or 0)
