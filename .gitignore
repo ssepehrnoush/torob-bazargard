@@ -1,0 +1,16 @@
+# secrets
+.env
+*.env
+# local environments / builds
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+__pycache__/
+*.pyc
+# data: the dataset and every DB built from it stay out of git (see README)
+data/torob.db
+data/*.db*
+app-data/
+deploy/dataset.zip
+deploy/*.tar.gz
+.claude/

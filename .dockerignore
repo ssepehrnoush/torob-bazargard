@@ -1,0 +1,10 @@
+**/node_modules
+**/.venv
+**/__pycache__
+data/torob.db
+data/explore
+app-data
+frontend/src
+.claude
+.env
+*.env
