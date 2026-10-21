@@ -14,7 +14,8 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import agent, catalog, config, contact, db, llm, shops, visit
+from . import agent, catalog, config, contact, db, llm, shops, stroll, visit
+from . import travel
 from .agent import fmt_shops, toman
 from .models import Ctx
 from .places import PLACES
@@ -69,7 +70,8 @@ def health():
 @app.get("/api/meta")
 def meta():
     m = db.meta()
-    return {"places": PLACES, "visit_presets": VISIT_PRESETS, "snapshot": m.get("snapshot_max_price_change_utc"),
+    return {"places": PLACES, "visit_presets": VISIT_PRESETS, "travel_modes": travel.MODES,
+            "range_minutes_presets": [10, 20, 30, 45, 60], "snapshot": m.get("snapshot_max_price_change_utc"),
             "counts": json.loads(m.get("csv_counts", "{}")), "llm": llm.describe(),
             "now": now_tehran().isoformat()}
 
@@ -280,6 +282,18 @@ class VisitIn(BaseModel):
     sids: list[int] = Field(min_length=1, max_length=8)
     ctx: Ctx = Ctx()
     confirmed: dict[int, dict] | None = None
+
+
+class StrollIn(BaseModel):
+    pid: int
+    sid: int
+    ctx: Ctx = Ctx()
+
+
+@app.post("/api/stroll")
+async def stroll_route(body: StrollIn):
+    """«مسیر گردش و خرید» around a shop the user is going to anyway."""
+    return await asyncio.to_thread(stroll.stroll, body.pid, body.sid, body.ctx)
 
 
 @app.post("/api/visit")

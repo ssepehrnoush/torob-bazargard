@@ -16,11 +16,12 @@ import uuid
 from typing import AsyncIterator
 
 from . import catalog, llm, shops
-from .models import Ctx
+from .models import Ctx, range_label
 from .places import PLACES, find_place
 from .timegeo import DAY_FA, VISIT_PRESETS, fa_digits, fa_text, now_tehran
 
 log = logging.getLogger("agent")
+TRAVEL_FA = {"walk": "پیاده", "car": "ماشین شخصی یا تاکسی", "transit": "مترو و اتوبوس"}
 
 SESSIONS: dict[str, dict] = {}
 SESSION_TTL_S = 6 * 3600
@@ -61,6 +62,9 @@ SYSTEM = """تو «بازارگرد» هستی: دستیار هوشمند خری
 - قیمت‌ها تومان هستند. قیمت ثبت‌شده در ترب با قیمت تأییدشده فرق دارد و موجودی تا قبل از استعلام نامعلوم است؛ این را قاطی نکن.
 - اگر کاربر بودجه، قسطی، محدوده، زمان مراجعه یا مکان را گفت (حتی با انتخاب چیپ مثل «۳ تا ۵ میلیون»)، update_preferences را هم صدا بزن؛ برای سرعت، آن را هم‌زمان با search_products در همان پاسخ بفرست.
 - برای پوشاک و کفش اگر جنسیت (مردانه/زنانه) معلوم نیست، یکی از سؤال‌ها همین باشد؛ برای گوشی و لپ‌تاپ کاربری (عکاسی، بازی، باتری، کار روزمره) و بودجه مهم‌ترند.
+- برای کالاهایی که نسخهٔ غیراصل رایج دارند (گوشی، هدفون، شارژر، ساعت، عطر، کفش و پوشاک برند)، اگر کاربر نگفته، یکی از سؤال‌های ask_user این باشد: «فقط اورجینال یا غیراصل هم قبوله؟» و جوابش را با update_preferences(originality) ثبت کن.
+- اگر کاربر نگفته با چه وسیله‌ای می‌رود و دربارهٔ مسیر یا فاصله پرسید، با ask_user بپرس: پیاده، ماشین شخصی، یا مترو و اتوبوس. محدوده را ترجیحاً با زمان رسیدن (range_minutes) تنظیم کن، نه کیلومتر.
+- اگر در خروجی find_shops «پیشنهاد دورتر (اکازیون)» آمد، همان پیام آماده را به کاربر بگو و آن فروشگاه را در picks بیاور؛ اگر در محدوده چیزی نبود، محدودهٔ بزرگ‌تر را پیشنهاد بده.
 - وقتی کاربر کالایی را انتخاب کرد یا پرسید «از کجا بخرم»، find_shops بزن و با show_shops بهترین گزینه‌ها را با دلیل معرفی کن (قیمت، فاصله، باز بودن در زمان رسیدن، تازگی قیمت، قسطی).
 - اگر فروشگاه نزدیک کم است یا هیچ است، صادقانه بگو و راه‌حل بده: بزرگ کردن شعاع، کالای مشابه در نزدیکی، یا استعلام از فروشگاه‌ها.
 - وقتی کاربر خواست از موجودی/قیمت مطمئن شود یا با فروشگاه تماس بگیرد، start_inquiry بزن.
@@ -95,7 +99,10 @@ TOOLS = [
             "installments_only": {"type": "boolean", "description": "فقط فروشگاه‌های دارای خرید قسطی/اعتباری"},
             "torob_pay_only": {"type": "boolean"},
             "open_only": {"type": "boolean", "description": "فقط فروشگاه‌های باز در زمان مراجعه"},
-            "radius_km": {"type": "number"},
+            "radius_km": {"type": "number", "description": "محدوده بر حسب کیلومتر (حالت km را فعال می‌کند)"},
+            "range_minutes": {"type": "integer", "description": "محدوده بر حسب زمان رسیدن، دقیقه (حالت time را فعال می‌کند)"},
+            "travel_mode": {"type": "string", "enum": ["walk", "car", "transit"], "description": "پیاده، ماشین شخصی یا تاکسی، مترو و اتوبوس"},
+            "originality": {"type": "string", "enum": ["any", "original_only"], "description": "فقط اورجینال یا غیراصل هم قبول است"},
             "visit": {"type": "string", "enum": list(VISIT_PRESETS)},
             "place": {"type": "string", "enum": PLACE_IDS, "description": "محل کاربر از بین مکان‌های آماده"}}}}},
     {"type": "function", "function": {
@@ -177,7 +184,8 @@ def state_note(ctx: Ctx, ui: dict, sess: dict) -> str:
     lines = [
         "وضعیت فعلی (برای تصمیم‌گیری؛ به کاربر تکرار نکن):",
         f"- اکنون: {DAY_FA[now.weekday()]} ساعت {now:%H:%M} به وقت تهران",
-        f"- محل کاربر: {ctx.place} | شعاع: {ctx.radius_km:g} کیلومتر | زمان مراجعه: {VISIT_PRESETS.get(ctx.visit, ctx.visit)}",
+        f"- محل کاربر: {ctx.place} | محدوده: {range_label(ctx)} | رفت‌وآمد: {TRAVEL_FA.get(ctx.travel_mode, ctx.travel_mode)} | زمان مراجعه: {VISIT_PRESETS.get(ctx.visit, ctx.visit)}",
+        f"- اصالت: {'فقط اورجینال' if ctx.originality == 'original_only' else 'هنوز نگفته / فرقی ندارد'}",
         f"- بودجه: {budget} | فقط قسطی: {'بله' if ctx.installments_only else 'خیر'} | فقط باز: {'بله' if ctx.open_only else 'خیر'}",
     ]
     step = ui.get("step") or "discover"
@@ -204,8 +212,9 @@ def fmt_search(res: dict) -> str:
                    f"قیمت ثبت‌شده: {toman(it['price_min'])} تا {toman(it['price_max'])} | فروشگاه‌ها: {it['n_shops']} ({near})"
                    + (f" | قسطی: {it['n_installment']} فروشگاه" if it.get("n_installment") else "") + (f" | {specs}" if specs else ""))
     if res["items"] and not any(it.get("n_nearby") for it in res["items"]):
-        out.append("هشدار: هیچ‌کدام از این کالاها در شعاع کاربر فروشگاه ندارند؛ این را صادقانه بگو، فاصلهٔ نزدیک‌ترین "
-                   "فروشگاه را بگو و بزرگ‌تر کردن شعاع یا محلهٔ دیگر را پیشنهاد کن. نگو «نزدیک».")
+        out.append("هشدار: هیچ‌کدام از این کالاها در محدودهٔ کاربر فروشگاه ندارند. نگو «نزدیک». اگر کاربر کالای مشخصی "
+                   "خواسته یا پرسیده از کجا بخرد، find_shops را برای همان کالا بزن: ممکن است پیشنهاد دورتر خوبی (اکازیون) "
+                   "باشد که باید با پیام آماده‌اش بگویی؛ وگرنه بزرگ‌تر کردن محدوده را پیشنهاد کن.")
     f = res["facets"]
     if f.get("intent_category"):
         out.append(f"دستهٔ اصلی این جستجو (از روی عنوان‌ها): {f['intent_category']}")
@@ -227,7 +236,14 @@ def fmt_shops(pid: int, res: dict, similar: list[dict]) -> str:
                    f"{i['open_at_visit']['label']} | {i['freshness']['label']} | "
                    f"{'قسطی: ' + '، '.join(i['installments']) if i['installments'] else 'بدون قسطی'} | {i['mall'] or i['area'] or ''}"
                    + (f" | هشدار: {i['visit_warning']}" if i['visit_warning'] else "")
-                   + (f" | هشدار قیمت: {i['price_warning']}" if i.get('price_warning') else ""))
+                   + (f" | هشدار قیمت: {i['price_warning']}" if i.get('price_warning') else "")
+                   + (f" | اصالت: {i['authenticity']['label']} ({i['authenticity']['confidence']}٪)" if i.get('authenticity', {}).get('status') in ('suspicious', 'declared_copy') else ""))
+    if res.get("bargain"):
+        b = res["bargain"]
+        alt = f" (پیاده خیلی دور است: {b['alt_travel']['label']}؛ با مترو بگو)" if b.get("alt_travel") else ""
+        out.append(f"پیشنهاد دورتر (اکازیون): sid={b['sid']} {b['name']} | {toman(b['price'])} | {b['travel_label']}{alt} | پیام آماده: {b['message']}")
+    if res.get("expand") and st["in_radius"] < 3:
+        out.append("اگر محدوده بزرگ‌تر شود: " + "، ".join(f"{e['label']}: {e['count']} فروشگاه" for e in res["expand"]))
     if similar:
         out.append("کالاهای مشابه با فروشگاه نزدیک:")
         for s in similar:
@@ -271,6 +287,14 @@ def apply_preferences(ctx: Ctx, args: dict) -> Ctx:
             data[k] = bool(args[k])
     if args.get("radius_km"):
         data["radius_km"] = max(0.3, min(40.0, float(args["radius_km"])))
+        data["range_mode"] = "km"
+    if args.get("range_minutes"):
+        data["range_minutes"] = max(5, min(120, int(args["range_minutes"])))
+        data["range_mode"] = "time"
+    if args.get("travel_mode") in ("walk", "car", "transit"):
+        data["travel_mode"] = args["travel_mode"]
+    if args.get("originality") in ("any", "original_only"):
+        data["originality"] = args["originality"]
     if args.get("visit") in VISIT_PRESETS:
         data["visit"] = args["visit"]
     p = find_place(args.get("place"))
@@ -308,6 +332,8 @@ async def exec_tool(name: str, args: dict, ctx: Ctx, sess: dict) -> tuple[str, d
     if name == "update_preferences":
         new = apply_preferences(ctx, args)
         changed = {k: v for k, v in new.model_dump().items() if ctx.model_dump().get(k) != v}
+        if changed.get("range_mode") == "time":
+            changed.setdefault("range_minutes", new.range_minutes)
         return f"ترجیحات به‌روز شد: {json.dumps(changed, ensure_ascii=False)}", {"detail": _pref_detail(changed)}, new
     if name == "find_shops":
         pid = int(args.get("pid", 0))
@@ -317,8 +343,10 @@ async def exec_tool(name: str, args: dict, ctx: Ctx, sess: dict) -> tuple[str, d
             similar = await asyncio.to_thread(catalog.similar_products, pid, ctx, 3)
             _remember(sess, similar)
         st = res["stats"]
+        # a worthwhile shop beyond the range is offered to the user even if the model words it differently
+        sess["bargain"] = {"pid": pid, **res["bargain"]} if res.get("bargain") else None
         return fmt_shops(pid, res, similar), {
-            "detail": f"{fa_digits(st['total'])} فروشگاه، {fa_digits(st['in_radius'])} در شعاع شما"}, ctx
+            "detail": f"{fa_digits(st['total'])} فروشگاه، {fa_digits(st['in_radius'])} در محدودهٔ شما"}, ctx
     return f"ابزار ناشناخته: {name}", None, ctx
 
 
@@ -369,6 +397,19 @@ def quick_prefs(text: str, ctx: Ctx) -> tuple[Ctx, dict]:
         args["installments_only"] = True
     if re.search(r"الان باز|همین الان|باز باشه|باز باشد", t):
         args["open_only"] = True
+    if re.search(r"پیاده", t):
+        args["travel_mode"] = "walk"
+    elif re.search(r"مترو|اتوبوس|حمل ?و ?نقل عمومی|بی ?آر ?تی", t):
+        args["travel_mode"] = "transit"
+    elif re.search(r"با ماشین|ماشین (?:دارم|شخصی)|با خودرو|رانندگی", t):
+        args["travel_mode"] = "car"
+    m = re.search(r"(\d+)\s*(?:دقیقه|دیقه)", t)
+    if m and 5 <= int(m.group(1)) <= 120 and re.search(r"تا|حداکثر|بیشتر از|نزدیک", t):
+        args["range_minutes"] = int(m.group(1))
+    if re.search(r"غیر ?اصل هم|کپی هم|فرقی نمی ?کنه اصل|اصل بودن مهم نیست", t):
+        args["originality"] = "any"
+    elif re.search(r"فقط اصل|فقط اورجینال|اورجینال باشه|اصل باشه|اورجینال می ?خوام", t):
+        args["originality"] = "original_only"
     if "فردا صبح" in t:
         args["visit"] = "tomorrow_morning"
     elif re.search(r"فردا (?:عصر|شب|بعدازظهر|بعد از ظهر)", t):
@@ -384,6 +425,8 @@ def quick_prefs(text: str, ctx: Ctx) -> tuple[Ctx, dict]:
         return ctx, {}
     new = apply_preferences(ctx, args)
     changed = {k: v for k, v in new.model_dump().items() if ctx.model_dump().get(k) != v}
+    if changed.get("range_mode") == "time":
+        changed.setdefault("range_minutes", new.range_minutes)
     return new, changed
 
 
@@ -401,11 +444,15 @@ def prefetch_query(text: str) -> str | None:
     if ":" in text or len(text) > 200:
         return None  # chip answers and long messages go to the model as they are
     t = _NUM_WORDS.sub(lambda m: str(_NUMS[m.group(1)]) + " " + m.group(2), text.translate(_FA_DIGITS))
+    t = re.sub(r"\d+\s*(?:دقیقه|دیقه)", " ", t)
     words = [w for w in re.split(r"[\s،,!؟?]+", t) if w]
     money = {"میلیون", "ملیون", "هزار", "تومن", "تومان", "م", "میلیارد"}
     places = {w for p in PLACES for w in p["label"].replace("(", " ").replace(")", " ").split()}
-    words = [w for w in words if w not in places and w not in ("برم", "بریم", "میرم", "کجا", "کجاست", "بیام")]
-    kept = [w for i, w in enumerate(words)
+    # place names with a suffix («تجریشم») and travel words are preferences, not product keywords
+    travel = {"مترو", "اتوبوس", "پیاده", "ماشین", "تاکسی", "خودرو", "دقیقه", "دیقه", "راه", "محدوده"}
+    words = [w for w in words if w not in places and not any(w.startswith(p) for p in places if len(p) > 3)
+             and w.strip(".") not in travel and w not in ("برم", "بریم", "میرم", "کجا", "کجاست", "بیام")]
+    kept = [w.strip(".") for i, w in enumerate(words) if w.strip(".")
             if w not in _STOP and not (w.isdigit() and i + 1 < len(words) and words[i + 1] in money)]
     return " ".join(kept[:6]) if kept else None
 
@@ -427,6 +474,12 @@ def _pref_detail(changed: dict) -> str:
         parts.append(f"شعاع {fa_digits(changed['radius_km'])} کیلومتر")
     if "visit" in changed:
         parts.append(f"زمان مراجعه: {VISIT_PRESETS.get(changed['visit'], changed['visit'])}")
+    if "travel_mode" in changed:
+        parts.append(f"رفت‌وآمد: {TRAVEL_FA.get(changed['travel_mode'], '')}")
+    if "range_minutes" in changed or changed.get("range_mode") == "time":
+        parts.append(f"محدوده: تا {fa_digits(changed['range_minutes'])} دقیقه" if changed.get("range_minutes") else "محدوده: بر اساس زمان رسیدن")
+    if "originality" in changed:
+        parts.append("فقط کالای اورجینال" if changed["originality"] == "original_only" else "اصل و غیراصل")
     if "open_only" in changed:
         parts.append("فقط فروشگاه‌های باز" if changed["open_only"] else "همهٔ فروشگاه‌ها")
     return "، ".join(parts) or "بدون تغییر"
@@ -474,7 +527,11 @@ def terminal_event(name: str, args: dict, ctx: Ctx, sess: dict) -> dict | None:
                 continue
             if shops.shop(sid):
                 picks.append({"sid": sid, "why": fa_text(p.get("why", ""))})
+        bargain = sess.pop("bargain", None)
+        if bargain and bargain.get("pid") != pid:
+            bargain = None
         return {"type": "shops", "pid": pid, "product": card, "message": fa_text(args.get("message", "")), "picks": picks,
+                "bargain": bargain,
                 "suggestions": [fa_text(x) for x in args.get("suggestions", [])[:4]]}
     if name == "start_inquiry":
         pid = int(args.get("pid", 0))
@@ -484,8 +541,11 @@ def terminal_event(name: str, args: dict, ctx: Ctx, sess: dict) -> dict | None:
             return None
         return {"type": "inquiry", "pid": pid, "product": card, "sids": sids, "message": fa_text(args.get("message", ""))}
     if name == "reply":
-        return {"type": "message", "text": fa_text(args.get("message", "")),
-                "suggestions": [fa_text(x) for x in args.get("suggestions", [])[:4]]}
+        ev = {"type": "message", "text": fa_text(args.get("message", "")),
+              "suggestions": [fa_text(x) for x in args.get("suggestions", [])[:4]]}
+        if sess.get("bargain"):
+            ev["bargain"] = sess.pop("bargain")
+        return ev
     return None
 
 

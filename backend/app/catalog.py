@@ -7,7 +7,8 @@ from collections import Counter
 
 from . import db
 from .models import Ctx
-from .shops import all_shops, siblings
+from .shops import all_shops, in_range, siblings
+from .travel import quick_minutes
 from .timegeo import haversine_km
 
 SEARCH_SQL = """
@@ -80,7 +81,7 @@ def _count(st: dict, s, r, ctx: Ctx) -> None:
         st["nearest_km"] = round(km, 2)
     if s.installments:
         st["n_installment"] += 1
-    if km <= ctx.radius_km:
+    if in_range(ctx, km, quick_minutes(km, ctx.travel_mode)):
         st["n_nearby"] += 1
         if r["price_ok"] and (st["nearby_min_price"] is None or r["price_toman"] < st["nearby_min_price"]):
             st["nearby_min_price"] = r["price_toman"]

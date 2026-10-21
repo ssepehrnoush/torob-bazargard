@@ -1,16 +1,16 @@
 """Shops: in-memory cache, opening status, ranking of offers for a product, mall guidance."""
 from __future__ import annotations
 
-import math
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from functools import lru_cache
 
 from . import db
-from .models import Ctx
+from . import authenticity, travel
+from .models import Ctx, range_label
 from .timegeo import (Shift, fa_digits, fmt_km, haversine_km, now_tehran, open_status, resolve_visit_time,
-                      travel_estimate, week_table)
+                      week_table)
 
 INSTALLMENT_PROVIDERS = {"ترب‌پی", "اسنپ‌پی", "دیجی پی", "تارا", "ازکی‌وام"}
 
@@ -124,26 +124,30 @@ def mall_line(s: Shop) -> str | None:
     return "، ".join(parts) or None
 
 
+def in_range(ctx: Ctx, km: float, minutes: float) -> bool:
+    return minutes <= ctx.range_minutes if ctx.range_mode == "time" else km <= ctx.radius_km
+
+
 def shop_brief(s: Shop, ctx: Ctx, visit_at: datetime | None = None) -> dict:
     """Location / time facts about one shop relative to the user."""
     km = haversine_km(ctx.lat, ctx.lon, s.lat, s.lon)
-    travel = travel_estimate(km)
     visit_at = visit_at or resolve_visit_time(ctx.visit)
+    trip = travel.estimate(km, ctx.travel_mode, visit_at, (ctx.lat, ctx.lon), (s.lat, s.lon))
     arrive = visit_at
     if ctx.visit == "now":
-        arrive = visit_at + timedelta(minutes=travel["minutes"])
+        arrive = visit_at + timedelta(minutes=trip["minutes"])
     st_now = open_status(s.shifts, s.has_hours, now_tehran())
     st_arrive = open_status(s.shifts, s.has_hours, arrive)
     warning = None
     if st_arrive["state"] == "closed" and st_now["state"] == "open" and ctx.visit == "now":
-        warning = f"الان باز است ولی تا برسید ({travel['label']}) احتمالاً بسته می‌شود"
+        warning = f"الان باز است ولی تا برسید ({trip['label']}) احتمالاً بسته می‌شود"
     elif st_arrive["state"] == "open" and (st_arrive.get("closes_in_min") or 999) < 45:
         warning = f"زمان رسیدن شما فقط {fa_digits(st_arrive['closes_in_min'])} دقیقه تا بسته شدن مانده"
     return {
         "sid": s.sid, "shop_id": s.shop_id, "name": s.name, "area": s.area, "address": s.address,
         "lat": s.lat, "lon": s.lon, "mall": mall_line(s), "mall_name": s.mall_name,
-        "km": round(km, 2), "distance_label": fmt_km(km), "travel": travel,
-        "in_radius": km <= ctx.radius_km,
+        "km": round(km, 2), "distance_label": fmt_km(km), "travel": trip,
+        "in_radius": in_range(ctx, km, trip["minutes"]),
         "open_now": st_now, "open_at_visit": st_arrive, "visit_warning": warning,
         "badges": _shop_badges(s), "installments": s.installments,
         "torob_pay": s.torob_pay, "phone": s.phone, "is_real_name": s.is_real_name,
@@ -206,12 +210,35 @@ def _warranty(o: dict) -> str | None:
 SORTS = ("best", "cheapest", "nearest")
 
 
+VALUE_OF_MINUTE = 8_000  # toman a shopper gives up per extra minute of travel (both ways are counted)
+
+
+def _cost(i: dict) -> float | None:
+    """Price plus what the trip costs in time, plus small premiums for uncertainty. Lower is better."""
+    if not i["price"] or i["price_warning"]:
+        return None
+    c = i["price"] + 2 * i["travel"]["minutes"] * VALUE_OF_MINUTE
+    c += i["price"] * {"fresh": 0, "aging": 0.015, "stale": 0.03, "unknown": 0.03}[i["freshness"]["tier"]]
+    st = i["open_at_visit"]["state"]
+    c += i["price"] * (0.15 if st == "closed" else 0.02 if st == "unknown" else 0)
+    if i["authenticity"]["status"] in ("suspicious", "declared_copy"):
+        c += i["price"] * 0.10
+    return c
+
+
+def _toman(v: int) -> str:
+    return fa_digits(f"{int(round(v, -3)):,}").replace(",", "٫")
+
+
 def rank_shops_for_product(pid: int, ctx: Ctx, sort: str = "best", exclude: set[int] | None = None) -> dict:
-    """All shops listing the product, with filters applied and a transparent score + reasons."""
+    """All shops listing the product, with filters applied, ranked by price + travel time, with reasons."""
     shops = all_shops()
     visit_at = resolve_visit_time(ctx.visit)
-    items, hidden = [], {"installments": 0, "torob_pay": 0, "open": 0, "radius": 0, "excluded": 0}
-    for o in offers_for_product(pid):
+    offers = offers_for_product(pid)
+    priced_all = sorted(o["price_toman"] for o in offers if o["price_ok"] and o["price_toman"])
+    median_all = priced_all[len(priced_all) // 2] if priced_all else None
+    items, hidden = [], {"installments": 0, "torob_pay": 0, "open": 0, "original": 0, "radius": 0, "excluded": 0}
+    for o in offers:
         s = shops.get(o["sid"])
         if not s:
             continue
@@ -227,6 +254,7 @@ def rank_shops_for_product(pid: int, ctx: Ctx, sort: str = "best", exclude: set[
             "freshness": freshness(o["last_price_changed_ts"]),
             "seller_title": o["seller_title"], "warranty": _warranty(o), "n_listings": o["n_listings"],
             "stock": {"state": "unconfirmed", "label": "موجودی تأیید نشده"},
+            "authenticity": authenticity.assess(o, median_all, len(priced_all)),
         }
         if ctx.installments_only and not s.installments:
             hidden["installments"] += 1
@@ -237,6 +265,9 @@ def rank_shops_for_product(pid: int, ctx: Ctx, sort: str = "best", exclude: set[
         if ctx.open_only and brief["open_at_visit"]["state"] == "closed":
             hidden["open"] += 1
             continue
+        if ctx.originality == "original_only" and item["authenticity"]["status"] == "declared_copy":
+            hidden["original"] += 1
+            continue
         items.append(item)
 
     priced = sorted(i["price"] for i in items if i["price"])
@@ -245,31 +276,33 @@ def rank_shops_for_product(pid: int, ctx: Ctx, sort: str = "best", exclude: set[
         i["price_warning"] = None
         if i["price"] and len(priced) >= 4 and i["price"] < 0.55 * median:
             i["price_warning"] = "خیلی ارزان‌تر از بقیه؛ ممکن است کالای متفاوت، غیراصل یا قیمت اشتباه باشد"
+        i["cost"] = _cost(i)
     sane = [i["price"] for i in items if i["price"] and not i["price_warning"]]
     pmin = min(sane) if sane else None
     pmax = max(priced) if priced else None
     in_r = [i for i in items if i["in_radius"]]
-    kmin = min((i["km"] for i in items), default=None)
+    tmin = min((i["travel"]["minutes"] for i in items), default=None)
+    costed_in = [i for i in in_r if i["cost"] is not None]
+    best_in = min(costed_in, key=lambda i: i["cost"]) if costed_in else None
+    nearest_in = min(costed_in, key=lambda i: i["travel"]["minutes"]) if costed_in else None
+    worst_cost = max((i["cost"] for i in items if i["cost"] is not None), default=1)
+    best_cost = min((i["cost"] for i in items if i["cost"] is not None), default=0)
 
     for i in items:
-        # 1.0 for the cheapest, 0 for anything 25%+ more expensive; unpriced listings sit in between
-        if i["price"] and not i["price_warning"]:
-            price_s = 1 - min(1.0, (i["price"] - pmin) / max(pmin * 0.25, 1))
-        else:
-            price_s = 0.35
-        dist_s = math.exp(-i["km"] / max(ctx.radius_km, 1.0))
-        st = i["open_at_visit"]["state"]
-        open_s = {"open": 1.0, "unknown": 0.55, "closed": 0.0}[st]
-        fresh_s = {"fresh": 1.0, "aging": 0.6, "stale": 0.25, "unknown": 0.3}[i["freshness"]["tier"]]
-        extra = 0.05 if i["installments"] else 0
-        i["score"] = round(0.42 * price_s + 0.30 * dist_s + 0.18 * open_s + 0.10 * fresh_s + extra, 4)
+        i["score"] = round(1 - (i["cost"] - best_cost) / max(worst_cost - best_cost, 1), 4) if i["cost"] is not None else 0
         reasons = []
         if i["price"] and i["price"] == pmin and len(priced) > 1:
             reasons.append("ارزان‌ترین قیمت ثبت‌شده")
         if i["price_warning"]:
             reasons.append("قیمت مشکوک به اشتباه")
-        if i["km"] == kmin and len(items) > 1:
+        if i["travel"]["minutes"] == tmin and len(items) > 1:
             reasons.append("نزدیک‌ترین به شما")
+        if nearest_in and i is not nearest_in and i["cost"] is not None and i["price"] and nearest_in["price"] \
+                and i["price"] < nearest_in["price"] and i["cost"] < nearest_in["cost"]:
+            extra = i["travel"]["minutes"] - nearest_in["travel"]["minutes"]
+            if extra > 3:
+                reasons.append(f"{_toman(nearest_in['price'] - i['price'])} تومان ارزان‌تر از نزدیک‌ترین، با {fa_digits(extra)} دقیقه راه بیشتر؛ می‌ارزد")
+        st = i["open_at_visit"]["state"]
         if st == "open":
             reasons.append("در زمان رسیدن باز است")
         elif st == "closed":
@@ -278,16 +311,18 @@ def rank_shops_for_product(pid: int, ctx: Ctx, sort: str = "best", exclude: set[
             reasons.append("قیمت اخیراً به‌روز شده")
         if i["installments"]:
             reasons.append("امکان خرید قسطی")
+        if i["authenticity"]["status"] in ("suspicious", "declared_copy"):
+            reasons.append(i["authenticity"]["label"])
         if not i["in_radius"]:
-            reasons.append("خارج از شعاع انتخابی شما")
+            reasons.append("خارج از محدودهٔ انتخابی شما")
         i["reasons"] = reasons
 
     if sort == "cheapest":
         items.sort(key=lambda i: (i["price"] is None, i["price"] or 0, i["km"]))
     elif sort == "nearest":
-        items.sort(key=lambda i: i["km"])
+        items.sort(key=lambda i: i["travel"]["minutes"])
     else:
-        items.sort(key=lambda i: (not i["in_radius"], -i["score"]))
+        items.sort(key=lambda i: (not i["in_radius"], i["cost"] is None, i["cost"] or 0))
 
     # several shops with this product in the same mall: one trip, several options
     mall_count: dict[str, int] = {}
@@ -319,8 +354,46 @@ def rank_shops_for_product(pid: int, ctx: Ctx, sort: str = "best", exclude: set[
         "stats": {"total": len(items), "in_radius": len(in_r), "price_min": pmin, "price_max": pmax, "price_median": median,
                   "open_at_visit": sum(1 for i in items if i["open_at_visit"]["state"] == "open"),
                   "hidden": hidden},
+        "bargain": _bargain(items, best_in, ctx, visit_at),
+        "expand": _expand(items, ctx),
+        "range": {"mode": ctx.range_mode, "minutes": ctx.range_minutes, "km": ctx.radius_km,
+                  "travel_mode": ctx.travel_mode, "label": range_label(ctx)},
         "visit_at": visit_at.isoformat(),
     }
+
+
+def _bargain(items: list[dict], best_in: dict | None, ctx: Ctx, visit_at) -> dict | None:
+    """A shop outside the chosen range that is worth the longer trip (or the only good option)."""
+    out = [i for i in items if not i["in_radius"] and i["cost"] is not None and i["open_at_visit"]["state"] != "closed"]
+    if not out:
+        return None
+    cand = min(out, key=lambda i: i["cost"])
+    base = {"sid": cand["sid"], "name": cand["name"], "price": cand["price"], "minutes": cand["travel"]["minutes"],
+            "travel_label": cand["travel"]["label"], "mall": cand["mall"] or cand["area"], "travel_mode": cand["travel"]["mode"], "alt_travel": None}
+    if ctx.travel_mode == "walk" and cand["travel"]["minutes"] > 40:
+        # nobody walks two hours for a bargain: say how long it is by metro instead
+        alt = travel.estimate(cand["km"], "transit", visit_at, (ctx.lat, ctx.lon), (cand["lat"], cand["lon"]))
+        base["alt_travel"] = {"mode": "walk", "minutes": base["minutes"], "label": base["travel_label"]}
+        base.update(minutes=alt["minutes"], travel_label=alt["label"], travel_mode=alt["mode"])
+    if best_in is None:
+        return {**base, "saving": None, "extra_minutes": None,
+                "message": "توی محدودهٔ انتخابی شما مورد مناسبی پیدا نکردم، اما یه پیشنهاد خیلی خوب در فاصلهٔ دورتری دارم. مایلید بررسیش کنیم؟"}
+    if cand["cost"] < best_in["cost"] * 0.98 and cand["price"] < best_in["price"]:
+        saving = best_in["price"] - cand["price"]
+        extra = cand["travel"]["minutes"] - best_in["travel"]["minutes"]
+        return {**base, "saving": saving, "extra_minutes": extra,
+                "message": f"یه پیشنهاد خیلی خوب کمی دورتر دارم: {_toman(saving)} تومان ارزان‌تر، با {fa_digits(max(extra, 1))} دقیقه راه بیشتر. مایلید بررسیش کنیم؟"}
+    return None
+
+
+def _expand(items: list[dict], ctx: Ctx) -> list[dict]:
+    """How many shops a wider range would add (offered when the current range is thin)."""
+    if ctx.range_mode == "time":
+        steps = sorted({m for m in (int(ctx.range_minutes * 1.5), ctx.range_minutes * 2, 60) if m > ctx.range_minutes})
+        return [{"minutes": m, "count": sum(1 for i in items if i["travel"]["minutes"] <= m),
+                 "label": f"تا {fa_digits(m)} دقیقه"} for m in steps[:3]]
+    steps = [ctx.radius_km * 2, ctx.radius_km * 4]
+    return [{"km": k, "count": sum(1 for i in items if i["km"] <= k), "label": f"تا {fa_digits(round(k))} کیلومتر"} for k in steps]
 
 
 # ---------------------------------------------------------------------------------------

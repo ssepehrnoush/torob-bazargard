@@ -71,3 +71,41 @@ def test_agent_drops_hallucinated_products():
     _, sess = agent.session(None)
     ev = agent.terminal_event("show_products", {"message": "x", "picks": [{"pid": 999999999, "why": "?"}]}, Ctx(), sess)
     assert ev is None
+
+
+def test_metro_route_uses_real_lines():
+    from app import travel
+    r = travel.transit_route(35.8046, 51.4339, 35.6950, 51.4107)  # Tajrish -> Jomhouri
+    assert any(l["mode"] == "metro" for l in r["legs"]) and 20 < r["minutes"] < 90
+
+
+@needs_db
+def test_time_range_and_bargain_beyond_it():
+    from app import shops as sh
+    pid = catalog.search_products("گوشی سامسونگ S25 FE", Ctx(), category="گوشی موبایل", limit=1)["items"][0]["pid"]
+    far = Ctx(range_mode="time", range_minutes=15, travel_mode="car", lat=35.8046, lon=51.4339, place="تجریش")
+    r = sh.rank_shops_for_product(pid, far)
+    assert r["stats"]["in_radius"] == 0 and r["bargain"] and "دورتر" in r["bargain"]["message"]
+    walker = sh.rank_shops_for_product(pid, far.model_copy(update={"travel_mode": "walk"}))
+    b = walker["bargain"]
+    assert b and b["travel_mode"] == "transit" and b["alt_travel"]["mode"] == "walk"  # no 3-hour walks
+    near = sh.rank_shops_for_product(pid, Ctx(range_mode="time", range_minutes=20, travel_mode="walk"))
+    assert near["stats"]["in_radius"] > 0
+    assert all("authenticity" in i for i in near["items"])
+
+
+def test_authenticity_reads_seller_text():
+    from app import authenticity
+    copy = authenticity.assess({"seller_title": "ایرپاد پرو مستر کپی", "price_toman": 900000, "price_ok": 1}, 9_000_000, 5)
+    assert copy["status"] == "declared_copy"
+    cheap = authenticity.assess({"seller_title": "ایرپاد پرو", "price_toman": 3_000_000, "price_ok": 1}, 9_000_000, 5)
+    assert cheap["status"] == "suspicious" and cheap["confidence"] > 0
+
+
+@needs_db
+def test_stroll_finds_nearby_deals():
+    from app import shops as sh, stroll
+    pid = catalog.search_products("گوشی سامسونگ S25 FE", Ctx(), category="گوشی موبایل", limit=1)["items"][0]["pid"]
+    anchor = sh.rank_shops_for_product(pid, Ctx())["items"][0]["sid"]
+    r = stroll.stroll(pid, anchor, Ctx())
+    assert r["stops"] and all(s["item"]["below_pct"] >= 12 for s in r["stops"])

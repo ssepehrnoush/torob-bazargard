@@ -30,10 +30,21 @@ def toman_fa(v: int) -> str:
     return fa_digits(f"{v:,}").replace(",", "٫")
 
 
-def draft_message(product_title: str, price: int | None, ctx: Ctx, shop_name: str) -> str:
+def contact_auth(item: dict, ctx: Ctx) -> bool:
+    return ask_authenticity(item, ctx)
+
+
+def ask_authenticity(item: dict, ctx: Ctx) -> bool:
+    """Ask about originality when the user cares about it or our evidence is suspicious."""
+    return ctx.originality == "original_only" or item["authenticity"]["status"] in ("suspicious", "declared_copy")
+
+
+def draft_message(product_title: str, price: int | None, ctx: Ctx, shop_name: str, item: dict | None = None) -> str:
     lines = [f"سلام، وقت بخیر. «{product_title}» را در ترب دیدم"
              + (f" با قیمت {toman_fa(price)} تومان." if price else ".")]
     asks = ["الان موجود است؟", "قیمت امروزش چند است؟", "امروز تا چه ساعتی باز هستید؟"]
+    if item and ask_authenticity(item, ctx):
+        asks.append("کالا اصل (اورجینال) است یا طرح و کپی؟ گارانتی و فاکتور می‌دهید؟")
     if ctx.installments_only:
         asks.append("امکان خرید قسطی یا اعتباری دارید؟")
     asks.append("اگر موجود است، تا چند ساعت برایم نگه می‌دارید؟")
@@ -57,7 +68,7 @@ def _rng(shop_id: str, pid: int) -> random.Random:
     return random.Random(int(seed, 16))
 
 
-def simulate_reply(item: dict, s: shops.Shop, pid: int, forced: str | None = None) -> dict:
+def simulate_reply(item: dict, s: shops.Shop, pid: int, forced: str | None = None, ask_auth: bool = False) -> dict:
     """Decide what the (simulated) shop answers. Facts come from the scenario, not from an LLM."""
     rng = _rng(s.shop_id, pid)
     now_state = item["open_now"]["state"]
@@ -77,7 +88,7 @@ def simulate_reply(item: dict, s: shops.Shop, pid: int, forced: str | None = Non
     price = item.get("price")
     res = {"sid": s.sid, "outcome": outcome, "delay_s": round(1.2 + rng.random() * 3.2, 1),
            "confirmed_price": None, "in_stock": None, "hold_until": None, "hours_today": None, "text": None,
-           "installments": None}
+           "installments": None, "authenticity_check": None}
     close = item["open_now"].get("closes_at")
     if outcome == "closed":
         res["delay_s"] = 2.0
@@ -87,6 +98,8 @@ def simulate_reply(item: dict, s: shops.Shop, pid: int, forced: str | None = Non
     if outcome == "no_answer":
         res["delay_s"] = 6.0
         res["note"] = "پیام خوانده نشد و تلفن هم جواب نداد."
+        if ask_auth:
+            res["authenticity_check"] = _unanswered_auth(item)
         return res
     hours_txt = f"تا ساعت {close} باز هستیم" if close else "امروز تا ۹ شب هستیم"
     res["hours_today"] = close or "۲۱:۰۰ (طبق گفتهٔ فروشنده)"
@@ -117,7 +130,41 @@ def simulate_reply(item: dict, s: shops.Shop, pid: int, forced: str | None = Non
     if s.installments:
         res["installments"] = "، ".join(s.installments)
         res["text"] += f" قسطی هم با {s.installments[0]} داریم."
+    if ask_auth:
+        check, sentence = _auth_answer(item, rng)
+        res["authenticity_check"] = check
+        res["text"] += " " + sentence
     return res
+
+
+def _auth_answer(item: dict, rng: random.Random) -> tuple[dict, str]:
+    """The (simulated) shop's answer about originality. Only an admission confirms a copy; a claim of
+    originality is reported as the seller's claim, next to our own estimate."""
+    a = item["authenticity"]
+    if a["status"] == "declared_copy":
+        roll = 0.0
+    elif a["status"] == "suspicious":
+        roll = rng.random()
+    else:
+        roll = 0.9
+    if roll < 0.45:
+        return ({"status": "confirmed_copy", "label": "غیراصل (به گفتهٔ خود فروشنده)", "confidence": 95},
+                "راستش این یکی طرح اصلیه (های‌کپی)، اصلش رو الان نداریم.")
+    if roll < 0.75:
+        return ({"status": "unclear", "label": f"فروشنده جواب روشنی نداد؛ برآورد ما: {a['label']}",
+                 "confidence": a["confidence"], "reasons": a["reasons"]},
+                "کیفیتش خیلی خوبه، حضوری ببینید خودتون متوجه می‌شید.")
+    sentence = "اصله و گارانتی شرکتی داره، فاکتور هم می‌دیم."
+    if a["status"] == "suspicious":
+        return ({"status": "claimed_original", "confidence": a["confidence"], "reasons": a["reasons"],
+                 "label": f"فروشنده می‌گوید اصل است، ولی برآورد ما هنوز «{a['label']}» است"}, sentence)
+    return ({"status": "claimed_original", "label": "فروشنده می‌گوید اصل است و گارانتی می‌دهد", "confidence": 75}, sentence)
+
+
+def _unanswered_auth(item: dict) -> dict:
+    a = item["authenticity"]
+    return {"status": "unclear", "label": f"نتوانستیم از فروشنده بپرسیم؛ برآورد ما: {a['label']}",
+            "confidence": a["confidence"], "reasons": a["reasons"]}
 
 
 def _rank_confirmed(replies: list[dict], items: dict[int, dict]) -> list[dict]:
@@ -178,7 +225,8 @@ def prepare(pid: int, sids: list[int], ctx: Ctx) -> tuple[dict | None, dict, lis
     start = {"type": "inquiry_start", "product": {k: product[k] for k in ("pid", "title", "image", "price_min")},
              "shops": [{"sid": t["sid"], "name": t["name"], "price": t["price"], "phone": t["phone"],
                         "freshness": t["freshness"], "open_now": t["open_now"], "distance_label": t["distance_label"],
-                        "draft": draft_message(product["title"], t["price"], ctx, t["name"])} for t in targets],
+                        "authenticity": t["authenticity"],
+                        "draft": draft_message(product["title"], t["price"], ctx, t["name"], t)} for t in targets],
              "call_script": call_script(product["title"], targets[0]["price"]),
              "simulated": True,
              "notice": "شماره‌های دادهٔ هکاتون ساختگی‌اند؛ پاسخ فروشگاه‌ها شبیه‌سازی می‌شود. در نسخهٔ واقعی همین پیام از واتس‌اپ/بله یا تماس خودکار ارسال می‌شود."}
@@ -195,7 +243,7 @@ async def run_inquiry(pid: int, sids: list[int], ctx: Ctx, forced: dict[int, str
     plans = []
     for t in targets:
         s = shops.shop(t["sid"])
-        plans.append(simulate_reply(t, s, pid, (forced or {}).get(t["sid"])))
+        plans.append(simulate_reply(t, s, pid, (forced or {}).get(t["sid"]), contact_auth(t, ctx)))
     queue: asyncio.Queue = asyncio.Queue()
 
     async def deliver(rep: dict):

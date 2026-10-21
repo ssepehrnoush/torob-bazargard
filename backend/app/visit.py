@@ -5,7 +5,8 @@ from datetime import timedelta
 
 from . import shops
 from .models import Ctx
-from .timegeo import fa_digits, haversine_km, now_tehran, open_status, resolve_visit_time, travel_estimate
+from . import travel
+from .timegeo import fa_digits, haversine_km, now_tehran, open_status, resolve_visit_time
 
 STOP_MINUTES = 15  # time spent in each shop
 
@@ -24,13 +25,13 @@ def plan_visit(pid: int | None, sids: list[int], ctx: Ctx, confirmed: dict[int, 
         # nearest-neighbour ordering, but a shop that would be closed on arrival goes last
         def cost(s):
             km = haversine_km(lat, lon, s.lat, s.lon)
-            arr = t + timedelta(minutes=travel_estimate(km)["minutes"])
+            arr = t + timedelta(minutes=travel.quick_minutes(km, ctx.travel_mode, t))
             closed = open_status(s.shifts, s.has_hours, arr)["state"] == "closed"
             return (closed, km)
         nxt = min(remaining, key=cost)
         remaining.remove(nxt)
         km = haversine_km(lat, lon, nxt.lat, nxt.lon)
-        tr = travel_estimate(km)
+        tr = travel.estimate(km, ctx.travel_mode, t, (lat, lon), (nxt.lat, nxt.lon))
         same_mall = bool(stops) and stops[-1]["mall_name"] and stops[-1]["mall_name"] == nxt.mall_name
         if same_mall:
             tr = {"mode": "walk", "minutes": 3, "label": "در همین پاساژ"}
