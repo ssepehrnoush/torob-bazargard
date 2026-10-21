@@ -202,6 +202,9 @@ def fmt_search(res: dict) -> str:
         out.append(f"pid={it['pid']} | {it['title']} | برند: {it['brand'] or '-'} | دسته: {it['category']} | "
                    f"قیمت ثبت‌شده: {toman(it['price_min'])} تا {toman(it['price_max'])} | فروشگاه‌ها: {it['n_shops']} ({near})"
                    + (f" | قسطی: {it['n_installment']} فروشگاه" if it.get("n_installment") else "") + (f" | {specs}" if specs else ""))
+    if res["items"] and not any(it.get("n_nearby") for it in res["items"]):
+        out.append("هشدار: هیچ‌کدام از این کالاها در شعاع کاربر فروشگاه ندارند؛ این را صادقانه بگو، فاصلهٔ نزدیک‌ترین "
+                   "فروشگاه را بگو و بزرگ‌تر کردن شعاع یا محلهٔ دیگر را پیشنهاد کن. نگو «نزدیک».")
     f = res["facets"]
     if f.get("intent_category"):
         out.append(f"دستهٔ اصلی این جستجو (از روی عنوان‌ها): {f['intent_category']}")
@@ -330,9 +333,17 @@ def _amount(num: str, unit: str | None) -> int | None:
     return v if 10_000 <= v <= 100_000_000_000 else None
 
 
+_NUMS = {"یک": 1, "یه": 1, "دو": 2, "سه": 3, "چهار": 4, "پنج": 5, "شش": 6, "هفت": 7, "هشت": 8, "نه": 9, "ده": 10,
+         "پونزده": 15, "پانزده": 15, "بیست": 20, "سی": 30, "چهل": 40, "پنجاه": 50, "شصت": 60, "هفتاد": 70,
+         "هشتاد": 80, "نود": 90, "صد": 100, "دویست": 200, "سیصد": 300, "پونصد": 500, "پانصد": 500, "نیم": 0.5}
+_NUM_WORDS = re.compile(r"(?<![؀-ۿ])(" + "|".join(sorted(_NUMS, key=len, reverse=True)) +
+                        r")\s+(میلیون|ملیون|میلیارد|هزار)")
+
+
 def quick_prefs(text: str, ctx: Ctx) -> tuple[Ctx, dict]:
     """Obvious preferences are applied straight from the user's words (saves one model round trip)."""
-    t = text.translate(_FA_DIGITS).replace("‌", " ")
+    t = _NUM_WORDS.sub(lambda m: str(_NUMS[m.group(1)]) + " " + m.group(2),
+                       text.translate(_FA_DIGITS).replace("‌", " "))
     args: dict = {}
     m = _RANGE.search(t)
     if m and _amount(m.group(2), m.group(3)):
@@ -381,8 +392,11 @@ def prefetch_query(text: str) -> str | None:
     """Keywords for an automatic first search (lets the model answer in one call when the query is clear)."""
     if ":" in text or len(text) > 200:
         return None  # chip answers and long messages go to the model as they are
-    words = [w for w in re.split(r"[\s،,.!؟?]+", text.translate(_FA_DIGITS)) if w]
+    t = _NUM_WORDS.sub(lambda m: str(_NUMS[m.group(1)]) + " " + m.group(2), text.translate(_FA_DIGITS))
+    words = [w for w in re.split(r"[\s،,!؟?]+", t) if w]
     money = {"میلیون", "ملیون", "هزار", "تومن", "تومان", "م", "میلیارد"}
+    places = {w for p in PLACES for w in p["label"].replace("(", " ").replace(")", " ").split()}
+    words = [w for w in words if w not in places and w not in ("برم", "بریم", "میرم", "کجا", "کجاست", "بیام")]
     kept = [w for i, w in enumerate(words)
             if w not in _STOP and not (w.isdigit() and i + 1 < len(words) and words[i + 1] in money)]
     return " ".join(kept[:6]) if kept else None
@@ -550,10 +564,12 @@ async def run_turn(session_id: str | None, text: str, ctx: Ctx, ui: dict) -> Asy
         other_calls = [p for p in parsed if p[1] not in TERMINAL and p[1] != "update_preferences"]
         results: dict[str, str] = {}
         for cid, name, args in pref_calls:
+            before = ctx
             text_out, step, ctx = await exec_tool(name, args, ctx, sess)
             results[cid] = text_out
-            yield {"type": "step", "tool": name, "label": STEP_LABELS[name], **(step or {})}
-            yield {"type": "ctx", "ctx": ctx.model_dump()}
+            if ctx != before:  # a no-op update is not worth a visible step
+                yield {"type": "step", "tool": name, "label": STEP_LABELS[name], **(step or {})}
+                yield {"type": "ctx", "ctx": ctx.model_dump()}
         for cid, name, _ in other_calls:
             yield {"type": "step_start", "tool": name, "label": STEP_LABELS.get(name, name), "id": cid}
         outs = await asyncio.gather(*(exec_tool(n, a, ctx, sess) for _, n, a in other_calls), return_exceptions=True)
