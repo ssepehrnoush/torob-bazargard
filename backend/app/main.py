@@ -135,8 +135,12 @@ async def compare(body: CompareIn):
     return res
 
 
+def client_key(request: Request) -> str:
+    return "ip:" + (request.client.host if request.client else "?")
+
+
 @app.post("/api/compare/verdict")
-async def compare_verdict(body: CompareIn):
+async def compare_verdict(body: CompareIn, request: Request):
     res = await asyncio.to_thread(catalog.compare_products, body.pids)
     near = catalog.nearby_offer_stats([p["pid"] for p in res["products"]], body.ctx)
     lines = []
@@ -147,6 +151,7 @@ async def compare_verdict(body: CompareIn):
     for r in res["rows"][:22]:
         lines.append(f"{r['key']}: " + " | ".join(v or "-" for v in r["values"]))
     try:
+        llm.check_session_budget(client_key(request))
         data = await asyncio.wait_for(llm.complete_json(
             "تو دستیار خرید هستی. با توجه به جدول مقایسه و نیاز کاربر، در حداکثر دو جملهٔ کوتاه فارسی بگو کدام کالا برای "
             "چه کسی بهتر است و تفاوت کلیدی چیست. فقط از داده‌های داده‌شده استفاده کن. خط تیره بلند و ایموجی نگذار. "
@@ -201,7 +206,7 @@ async def shops_for_product(body: ShopsIn):
 
 
 @app.post("/api/shops/insight")
-async def shops_insight(body: ShopsIn):
+async def shops_insight(body: ShopsIn, request: Request):
     res = await asyncio.to_thread(shops.rank_shops_for_product, body.pid, body.ctx, "best", set(body.exclude))
     items = res["items"]
     if not items:
@@ -214,6 +219,7 @@ async def shops_insight(body: ShopsIn):
         return fallback
     product = catalog.product_details(body.pid, 0) or {}
     try:
+        llm.check_session_budget(client_key(request))
         data = await asyncio.wait_for(llm.complete_json(
             "تو دستیار خرید حضوری هستی. از بین فروشگاه‌ها یکی را پیشنهاد کن و در یک تیتر کوتاه (حداکثر ۸ کلمه) و یک جملهٔ "
             "توضیح بگو چرا (قیمت، فاصله، باز بودن در زمان رسیدن، تازگی قیمت، قسطی) و اگر نکتهٔ مهمی هست (قیمت قدیمی، "
@@ -256,8 +262,9 @@ class InquiryIn(BaseModel):
 
 
 @app.post("/api/inquiry")
-async def inquiry(body: InquiryIn):
-    return sse(contact.run_inquiry(body.pid, body.sids, body.ctx, body.forced))
+async def inquiry(body: InquiryIn, request: Request):
+    log.info("inquiry pid=%s sids=%s (simulated; nothing is sent to shops)", body.pid, body.sids)
+    return sse(contact.run_inquiry(body.pid, body.sids, body.ctx, body.forced, client_key(request)))
 
 
 @app.post("/api/inquiry/draft")

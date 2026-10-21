@@ -127,7 +127,7 @@ def _rank_confirmed(replies: list[dict], items: dict[int, dict]) -> list[dict]:
 
 
 async def _summary_text(product: dict, replies: list[dict], items: dict[int, dict], best: dict | None,
-                        n_alt: int) -> str:
+                        n_alt: int, budget_key: str | None = None) -> str:
     facts = []
     for r in replies:
         i = items[r["sid"]]
@@ -137,6 +137,7 @@ async def _summary_text(product: dict, replies: list[dict], items: dict[int, dic
     if not llm.available():
         return fallback
     try:
+        llm.check_session_budget(budget_key)
         data = await asyncio.wait_for(llm.complete_json(
             "تو دستیار خرید حضوری هستی. نتیجهٔ استعلام (شبیه‌سازی‌شده) از فروشگاه‌ها را در حداکثر دو جملهٔ کوتاه فارسی "
             "جمع‌بندی کن: بهترین انتخاب تأییدشده و دلیلش، و اگر فروشگاهی ناموفق بود بگو جایگزین آماده است. "
@@ -184,8 +185,8 @@ def prepare(pid: int, sids: list[int], ctx: Ctx) -> tuple[dict | None, dict, lis
     return product, by_sid, targets, start
 
 
-async def run_inquiry(pid: int, sids: list[int], ctx: Ctx, forced: dict[int, str] | None = None
-                      ) -> AsyncIterator[dict]:
+async def run_inquiry(pid: int, sids: list[int], ctx: Ctx, forced: dict[int, str] | None = None,
+                      budget_key: str | None = None) -> AsyncIterator[dict]:
     product, by_sid, targets, start = await asyncio.to_thread(prepare, pid, sids, ctx)
     yield start
     if not product:
@@ -220,7 +221,7 @@ async def run_inquiry(pid: int, sids: list[int], ctx: Ctx, forced: dict[int, str
             leads = await asyncio.to_thread(shops.category_only_shops, product["category"], ctx,
                                             set(sids) | {a["sid"] for a in alternatives}, 3)
     yield {"type": "status", "text": "در حال جمع‌بندی پاسخ‌ها…"}
-    text = await _summary_text(product, replies, by_sid, best, len(alternatives) + len(similar))
+    text = await _summary_text(product, replies, by_sid, best, len(alternatives) + len(similar), budget_key)
     yield {"type": "summary", "text": text, "best_sid": best["sid"] if best else None,
            "confirmed_sids": [r["sid"] for r in confirmed], "failed_sids": failed,
            "alternatives": alternatives, "similar": similar, "leads": leads}

@@ -60,7 +60,10 @@ def _endpoint(name: str) -> LLMEndpoint | None:
 
 
 def llm_endpoints() -> list[LLMEndpoint]:
-    """Primary provider first, then the fallback (if configured and different)."""
+    """Primary provider first, then the fallback (if configured and different).
+    LLM_DISABLED=1 is the kill switch: no model is ever called and the app runs rule-based."""
+    if os.environ.get("LLM_DISABLED", "").strip().lower() in ("1", "true", "yes"):
+        return []
     order = [os.environ.get("LLM_PROVIDER", "openai"), os.environ.get("LLM_FALLBACK_PROVIDER", "boxapi")]
     out: list[LLMEndpoint] = []
     for name in order:
@@ -73,5 +76,9 @@ def llm_endpoints() -> list[LLMEndpoint]:
 DB_PATH = Path(os.environ.get("DB_PATH", str(PROJECT_DIR / "data" / "torob.db")))
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", str(PROJECT_DIR / "frontend" / "dist")))
 LLM_TIMEOUT_S = float(os.environ.get("LLM_TIMEOUT_S", "45"))
+# BoxAPI key limits are 1 concurrent request and ~20/min, shared with another app: stay below them.
+LLM_CONCURRENCY = int(os.environ.get("LLM_CONCURRENCY", "1"))
+LLM_CALLS_PER_MINUTE = int(os.environ.get("LLM_CALLS_PER_MINUTE", "14"))
+LLM_SESSION_CALLS_PER_HOUR = int(os.environ.get("LLM_SESSION_CALLS_PER_HOUR", "60"))
 # Current wall-clock can be pinned for demos/tests, e.g. "2026-10-22T11:30" (Tehran time).
 FIXED_NOW = os.environ.get("FIXED_NOW", "").strip() or None

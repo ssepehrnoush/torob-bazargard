@@ -1,10 +1,12 @@
 """Minimal OpenAI-compatible chat client with provider fallback (OpenAI <-> BoxAPI)."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
 import time
+from collections import deque
 
 import httpx
 
@@ -60,13 +62,52 @@ async def chat(messages: list[dict], tools: list[dict] | None = None, tool_choic
     return msg
 
 
+class BudgetExceeded(LLMUnavailable):
+    pass
+
+
+# The BoxAPI key allows one request at a time and ~20 per minute, shared with another app, so calls are
+# serialised, spaced, and capped per session; identical requests are served from the cache above.
+_gate = asyncio.Semaphore(config.LLM_CONCURRENCY)
+_recent: deque[float] = deque()
+_per_session: dict[str, deque[float]] = {}
+
+
+def check_session_budget(session_id: str | None) -> None:
+    if not session_id:
+        return
+    now = time.monotonic()
+    q = _per_session.setdefault(session_id, deque())
+    while q and now - q[0] > 3600:
+        q.popleft()
+    if len(q) >= config.LLM_SESSION_CALLS_PER_HOUR:
+        raise BudgetExceeded("session LLM budget used up")
+    q.append(now)
+
+
+async def _rate_wait() -> None:
+    while True:
+        now = time.monotonic()
+        while _recent and now - _recent[0] > 60:
+            _recent.popleft()
+        if len(_recent) < config.LLM_CALLS_PER_MINUTE:
+            _recent.append(now)
+            return
+        await asyncio.sleep(60 - (now - _recent[0]) + 0.05)
+
+
 async def _chat(messages, tools, tool_choice, temperature, max_tokens, json_mode) -> dict:
+    async with _gate:
+        await _rate_wait()
+        return await _chat_unlocked(messages, tools, tool_choice, temperature, max_tokens, json_mode)
+
+
+async def _chat_unlocked(messages, tools, tool_choice, temperature, max_tokens, json_mode) -> dict:
     errors = []
     for ep in config.llm_endpoints():
         body: dict = {"model": ep.model, "messages": messages, **ep.extra}
         if tools:
             body["tools"] = tools
-            body["parallel_tool_calls"] = True
             if tool_choice:
                 body["tool_choice"] = tool_choice
         if temperature is not None and not ep.extra.get("reasoning_effort"):
@@ -77,8 +118,12 @@ async def _chat(messages, tools, tool_choice, temperature, max_tokens, json_mode
             body["response_format"] = {"type": "json_object"}
         t0 = time.monotonic()
         try:
-            r = await client().post(f"{ep.base_url}/chat/completions", json=body,
-                                    headers={"Authorization": f"Bearer {ep.api_key}"})
+            for attempt in range(3):
+                r = await client().post(f"{ep.base_url}/chat/completions", json=body,
+                                        headers={"Authorization": f"Bearer {ep.api_key}"})
+                if r.status_code != 429:  # the shared key is busy: back off briefly and retry
+                    break
+                await asyncio.sleep(1.5 * (attempt + 1))
             if r.status_code >= 400:
                 raise LLMUnavailable(f"{ep.name} HTTP {r.status_code}: {r.text[:300]}")
             data = r.json()
