@@ -35,15 +35,13 @@ export function ctxChanges(a: Ctx, b: Ctx, meta: Meta | null): string[] {
   return out;
 }
 
-/** Header chip: where you are, how you travel and how far you will go. One tap opens a quick sheet. */
+/** Header chip: how you travel and how far you will go. The place itself lives in the sheet this opens
+    (a place name never fit beside the travel icon on a phone). */
 export function PlaceChip({ ctx, onOpen }: { ctx: Ctx; onOpen: () => void }) {
   return (
-    <button className="placechip" onClick={onOpen} aria-label="محل، نوع رفت‌وآمد و محدوده">
+    <button className="placechip" onClick={onOpen} aria-label={`از ${ctx.place}، تا ${rangeText(ctx)}؛ تغییر محل، نوع رفت‌وآمد و محدوده`}>
       <Icon name={MODE_ICON[ctx.travel_mode] ?? "pin"} size={18} />
-      <span className="pc-txt">
-        <b className="ellipsis">{shortPlace(ctx.place)}</b>
-        <small className="ellipsis">تا {rangeText(ctx)}</small>
-      </span>
+      <span>تا {rangeText(ctx)}</span>
     </button>
   );
 }
