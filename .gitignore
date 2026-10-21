@@ -17,3 +17,7 @@ deploy/*.tar.gz
 
 # commercial font licensed to Torob: used for the demo deploy only, never committed
 frontend/public/fonts/IRANYekan*
+
+# Daii's private defense notes and demo voice-over (sent via Telegram); not part of the product
+STUDY-GUIDE.html
+NARRATION.html
