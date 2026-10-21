@@ -542,11 +542,8 @@ def terminal_event(name: str, args: dict, ctx: Ctx, sess: dict) -> dict | None:
             return None
         return {"type": "inquiry", "pid": pid, "product": card, "sids": sids, "message": fa_text(args.get("message", ""))}
     if name == "reply":
-        ev = {"type": "message", "text": fa_text(args.get("message", "")),
-              "suggestions": [fa_text(x) for x in args.get("suggestions", [])[:4]]}
-        if sess.get("bargain"):
-            ev["bargain"] = sess.pop("bargain")
-        return ev
+        return {"type": "message", "text": fa_text(args.get("message", "")),
+                "suggestions": [fa_text(x) for x in args.get("suggestions", [])[:4]]}
     return None
 
 
@@ -592,6 +589,7 @@ async def run_turn(session_id: str | None, text: str, ctx: Ctx, ui: dict) -> Asy
             yield ev
         return
     t0 = time.monotonic()
+    sess.pop("bargain", None)  # an offer belongs to the turn that found it
     for it in range(MAX_ITERATIONS):
         history = _trim(sess["messages"])
         last_user = max(i for i, m in enumerate(history) if m["role"] == "user")
@@ -668,6 +666,9 @@ async def run_turn(session_id: str | None, text: str, ctx: Ctx, ui: dict) -> Asy
         for cid, _, _ in parsed:
             sess["messages"].append({"role": "tool", "tool_call_id": cid, "content": results.get(cid, "انجام شد")})
         if emitted:
+            # the far-away offer found by find_shops in this turn rides on whatever answer the model chose
+            if emitted["type"] in ("ask", "products", "message") and sess.get("bargain"):
+                emitted["bargain"] = sess.pop("bargain")
             emitted["elapsed_s"] = round(time.monotonic() - t0, 1)
             yield emitted
             break
