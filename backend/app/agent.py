@@ -449,7 +449,8 @@ def prefetch_query(text: str) -> str | None:
     money = {"میلیون", "ملیون", "هزار", "تومن", "تومان", "م", "میلیارد"}
     places = {w for p in PLACES for w in p["label"].replace("(", " ").replace(")", " ").split()}
     # place names with a suffix («تجریشم») and travel words are preferences, not product keywords
-    travel = {"مترو", "اتوبوس", "پیاده", "ماشین", "تاکسی", "خودرو", "دقیقه", "دیقه", "راه", "محدوده"}
+    travel = {"مترو", "اتوبوس", "پیاده", "ماشین", "تاکسی", "خودرو", "دقیقه", "دیقه", "راه", "محدوده",
+              "قسطی", "اقساطی", "نقدی", "اورجینال", "اصل", "باشه"}
     words = [w for w in words if w not in places and not any(w.startswith(p) for p in places if len(p) > 3)
              and w.strip(".") not in travel and w not in ("برم", "بریم", "میرم", "کجا", "کجاست", "بیام")]
     kept = [w.strip(".") for i, w in enumerate(words) if w.strip(".")
