@@ -11,7 +11,8 @@
 
 > شماره تلفن‌های دادهٔ هکاتون ساختگی‌اند؛ بنابراین طرف فروشگاه در مرحلهٔ ۴ **شبیه‌سازی** می‌شود و این موضوع در رابط کاربری همه‌جا برچسب خورده است. بخش دستیار (نوشتن پیام، ارسال هم‌زمان، خواندن پاسخ، جدا کردن دادهٔ تأییدشده از ثبت‌شده، پیشنهاد جایگزین) واقعی است.
 
-- نسخهٔ آنلاین: `https://bazargard.liara.run` (روی لیارا)
+- نسخهٔ آنلاین: [bazargard.liara.run](https://bazargard.liara.run) (روی لیارا)
+- کد: [github.com/ssepehrnoush/torob-bazargard](https://github.com/ssepehrnoush/torob-bazargard)، با مجوز [MIT](LICENSE) (فقط برای کد؛ دیتاست، برند ترب و فونت ایران‌یکان مال صاحبانشان است و در ریپو نیستند)
 - ویدیوی دمو و سناریو: [VIDEO-SCRIPT.md](VIDEO-SCRIPT.md)
 - یادداشت‌های کامل داده: [DATASET-NOTES.md](DATASET-NOTES.md)
 - امنیت ایجنت (چک‌لیست کارگاه AI Governance): [SECURITY.md](SECURITY.md)
