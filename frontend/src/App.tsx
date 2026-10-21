@@ -35,6 +35,15 @@ const PLACEHOLDER: Record<Step, string> = {
   inquiry: "سؤالی دربارهٔ این فروشگاه‌ها دارید؟",
   visit: "مثلاً: فردا صبح می‌رم، دوباره بچین",
 };
+/* Web Speech API error codes, each with what the person can actually do about it. */
+const VOICE_ERROR: Record<string, string> = {
+  "not-allowed": "اجازهٔ میکروفون داده نشده؛ از تنظیمات مرورگر اجازه بدهید یا تایپ کنید",
+  "service-not-allowed": "مرورگر شما اجازهٔ تشخیص صدا نمی‌دهد؛ لطفاً تایپ کنید",
+  "network": "سرویس تشخیص صدای مرورگر در دسترس نیست؛ لطفاً تایپ کنید",
+  "language-not-supported": "مرورگر شما تشخیص صدای فارسی ندارد؛ لطفاً تایپ کنید",
+  "no-speech": "صدایی نشنیدم؛ دوباره میکروفون را بزنید و حرف بزنید",
+  "audio-capture": "میکروفونی پیدا نشد؛ لطفاً تایپ کنید",
+};
 
 function loadCtx(): Ctx {
   try {
@@ -109,10 +118,18 @@ export default function App() {
       const t = e.results?.[0]?.[0]?.transcript as string | undefined;
       if (t) send(t);
     };
-    rec.onerror = () => toast("صدا تشخیص داده نشد؛ تایپ کنید");
+    rec.onerror = (e: any) => {
+      if (e?.error === "aborted") return; // stopped on purpose, nothing to say
+      toast(VOICE_ERROR[e?.error] ?? "صدا تشخیص داده نشد؛ لطفاً تایپ کنید");
+    };
     rec.onend = () => setListening(false);
     setListening(true);
-    rec.start();
+    try {
+      rec.start();
+    } catch {
+      setListening(false);
+      toast("تشخیص صدا شروع نشد؛ لطفاً تایپ کنید");
+    }
   };
 
   useEffect(() => {
@@ -394,7 +411,7 @@ export default function App() {
       </main>
 
       {step === "discover" && compare.length > 0 && (
-        <div className="comparebar fadein">
+        <div className="comparebar">
           <Icon name="compare" size={18} />
           <span className="grow">{fa(compare.length)} کالا برای مقایسه</span>
           <button className="textbtn light" onClick={() => setCompare([])}>پاک کردن</button>
