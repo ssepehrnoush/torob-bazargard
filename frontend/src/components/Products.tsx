@@ -179,7 +179,7 @@ export function CompareSheet({ pids, ctx, need, onClose, onShops, onRemove }: {
       {!d && <div className="shimmer" style={{ height: 240 }} />}
       {d && !d.error && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${prods.length}, 1fr)`, gap: 8 }}>
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${prods.length}, minmax(0, 1fr))`, gap: 8 }}>
             {prods.map((p) => (
               <div key={p.pid} className="card pad stack" style={{ gap: 6, padding: 10, border: verdict?.best_pid === p.pid ? "2px solid var(--brand)" : undefined }}>
                 <Img src={p.image} className="pimg" />
