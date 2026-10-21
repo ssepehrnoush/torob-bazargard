@@ -45,8 +45,11 @@ export function jalali(tsSeconds: number | undefined | null): string {
   }
 }
 
-/** "خیابان جمهوری (پاساژ علاءالدین)" -> "خیابان جمهوری"; "میدان فردوسی" -> "فردوسی" for the header chip. */
+export const HERE = "اینجا"; // the user's GPS position, short enough for the header chip and «حرکت از اینجا»
+
+/** "خیابان جمهوری (پاساژ علاءالدین)" -> "جمهوری"; "میدان فردوسی" -> "فردوسی"; GPS position -> "اینجا". */
 export function shortPlace(place: string): string {
+  if (place === HERE || place === "موقعیت فعلی من") return HERE; // older saved settings used the long label
   return place.split(" (")[0].replace(/^(میدان|خیابان|چهارراه)\s+/, "");
 }
 

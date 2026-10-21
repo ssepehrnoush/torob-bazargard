@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Icon } from "../icons";
-import { fa, parseToman, short, shortPlace } from "../fmt";
+import { fa, HERE, parseToman, short, shortPlace } from "../fmt";
 import type { Ctx, Meta, TravelMode } from "../types";
 import { MODE_ICON } from "./bits";
 import { Sheet } from "./Sheet";
@@ -22,7 +22,7 @@ export function rangeText(ctx: Ctx): string {
 /** What the assistant changed in this turn, as short chip labels («تا ۲۰۰ میلیون», «فقط قسطی»). */
 export function ctxChanges(a: Ctx, b: Ctx, meta: Meta | null): string[] {
   const out: string[] = [];
-  if (b.place !== a.place) out.push(shortPlace(b.place));
+  if (b.place !== a.place) out.push(`از ${shortPlace(b.place)}`);
   if (b.travel_mode !== a.travel_mode) out.push(MODES[b.travel_mode]);
   if (b.range_mode !== a.range_mode || b.range_minutes !== a.range_minutes || b.radius_km !== a.radius_km) out.push(`تا ${rangeText(b)}`);
   if (b.budget_max !== a.budget_max && b.budget_max) out.push(`تا ${short(b.budget_max)}`);
@@ -35,13 +35,15 @@ export function ctxChanges(a: Ctx, b: Ctx, meta: Meta | null): string[] {
   return out;
 }
 
-/** Header chip: how you travel and how far you will go. The place itself lives in the sheet this opens
-    (a place name never fit beside the travel icon on a phone). */
+/** Header chip, read as one phrase: «از فردوسی / تا ۲۰ دقیقه», with the travel mode as its icon. */
 export function PlaceChip({ ctx, onOpen }: { ctx: Ctx; onOpen: () => void }) {
   return (
-    <button className="placechip" onClick={onOpen} aria-label={`از ${ctx.place}، تا ${rangeText(ctx)}؛ تغییر محل، نوع رفت‌وآمد و محدوده`}>
+    <button className="placechip" onClick={onOpen} aria-label={`از ${shortPlace(ctx.place)} تا ${rangeText(ctx)}؛ تغییر محل، نوع رفت‌وآمد و محدوده`}>
       <Icon name={MODE_ICON[ctx.travel_mode] ?? "pin"} size={18} />
-      <span>تا {rangeText(ctx)}</span>
+      <span className="pc-txt">
+        <b className="ellipsis">از {shortPlace(ctx.place)}</b>
+        <small>تا {rangeText(ctx)}</small>
+      </span>
     </button>
   );
 }
@@ -61,7 +63,7 @@ export function RouteSheet({ ctx, setCtx, meta, toast, onClose }: { ctx: Ctx; se
           toast("فعلاً فقط فروشگاه‌های تهران را داریم؛ یکی از محله‌ها را انتخاب کنید");
           return;
         }
-        setCtx({ ...ctx, lat, lon, place: "موقعیت فعلی من" });
+        setCtx({ ...ctx, lat, lon, place: HERE });
       },
       () => toast("دسترسی به موقعیت داده نشد؛ یکی از محله‌ها را انتخاب کنید"),
       { enableHighAccuracy: true, timeout: 8000 }
@@ -108,8 +110,11 @@ export function RouteSheet({ ctx, setCtx, meta, toast, onClose }: { ctx: Ctx; se
         <div className="list">
           <button className="li" onClick={locate}>
             <Icon name="locate" size={18} />
-            <span className="grow">موقعیت فعلی من</span>
-            {ctx.place === "موقعیت فعلی من" && <Icon name="check" size={18} className="blue-txt" />}
+            <span className="grow stack" style={{ gap: 0 }}>
+              <span>از اینجا</span>
+              <span className="meta" style={{ fontWeight: 400 }}>با موقعیت‌یاب گوشی</span>
+            </span>
+            {shortPlace(ctx.place) === HERE && <Icon name="check" size={18} className="blue-txt" />}
           </button>
           {shown.map((p) => (
             <button key={p.id} className={"li" + (ctx.place === p.label ? " on" : "")}
