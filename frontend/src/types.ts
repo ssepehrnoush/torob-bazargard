@@ -9,6 +9,23 @@ export type Ctx = {
   installments_only: boolean;
   torob_pay_only: boolean;
   open_only: boolean;
+  range_mode: "time" | "km";
+  range_minutes: number;
+  travel_mode: TravelMode;
+  originality: "any" | "original_only";
+};
+
+export type TravelMode = "walk" | "car" | "transit";
+
+export type Leg = { mode: "walk" | "metro" | "transfer" | "taxi"; label: string; minutes: number; to?: string; line?: string; board?: string; alight?: string; stops?: number; at?: string };
+
+export type Travel = { mode: string; minutes: number; label: string; legs?: Leg[]; warning?: string };
+
+export type Authenticity = { status: "declared_copy" | "suspicious" | "likely_original" | "unknown"; confidence: number; label: string; reasons: string[] };
+
+export type Bargain = {
+  sid: number; name: string; price: number | null; mall: string | null; minutes: number; travel_mode: string; travel_label: string;
+  alt_travel: { mode: string; minutes: number; label: string } | null; saving: number | null; extra_minutes: number | null; message: string; pid?: number;
 };
 
 export type Spec = { k: string; v: string };
@@ -56,7 +73,7 @@ export type ShopBrief = {
   mall_name: string | null;
   km: number;
   distance_label: string;
-  travel: { mode: string; minutes: number; label: string };
+  travel: Travel;
   in_radius: boolean;
   open_now: OpenState;
   open_at_visit: OpenState;
@@ -85,6 +102,7 @@ export type ShopOffer = ShopBrief & {
   same_mall_count: number;
   price_warning: string | null;
   alt_open: { sid: number; name: string; price: number | null; distance_label: string; same_mall: boolean; open_label: string } | null;
+  authenticity?: Authenticity;
 };
 
 export type ShopsResult = {
@@ -98,6 +116,9 @@ export type ShopsResult = {
     hidden: Record<string, number>;
   };
   visit_at: string;
+  range?: { mode: string; minutes: number; km: number; travel_mode: string; label: string };
+  expand?: { minutes?: number; km?: number; count: number; label: string }[];
+  bargain?: Bargain | null;
   product: { pid: number; title: string; brand: string | null; image: string | null; category: string; price_min: number | null; price_max: number | null; n_shops: number };
   similar: ProductCard[];
   leads: (ShopBrief & { reasons: string[] })[];
@@ -148,6 +169,8 @@ export type FeedItem =
       suggestions?: string[];
       shopsPid?: number;
       inquiry?: { pid: number; sids: number[] };
+      bargain?: Bargain | null;
+      applied?: string[];
       error?: string;
       elapsed?: number;
     };
@@ -165,6 +188,7 @@ export type Reply = {
   note?: string;
   restock?: string | null;
   installments: string | null;
+  authenticity_check?: { status: "confirmed_copy" | "unclear" | "claimed_original"; label: string; confidence?: number; reasons?: string[] } | null;
 };
 
 export type InquiryShop = {
@@ -176,6 +200,7 @@ export type InquiryShop = {
   open_now: OpenState;
   distance_label: string;
   draft: string;
+  authenticity?: Authenticity;
 };
 
 export type InquirySummary = {
@@ -196,7 +221,7 @@ export type VisitStop = {
   mall_name: string | null;
   mall: string | null;
   address: string | null;
-  leg: { km: number; mode: string; minutes: number; label: string };
+  leg: Travel & { km: number };
   arrive: string;
   arrive_label: string;
   open: OpenState;
@@ -229,4 +254,21 @@ export type Meta = {
   counts: Record<string, number>;
   llm: { available: boolean; providers: { name: string; model: string }[] };
   now: string;
+  travel_modes?: Record<TravelMode, string>;
+  range_minutes_presets?: number[];
+};
+
+export type StrollStop = {
+  sid: number; name: string; mall: string | null; lat: number; lon: number; walk_minutes: number;
+  item: { pid: number; title: string; category: string; image: string | null; price: number; usual_price: number; below_pct: number; label: string };
+  nav: { neshan: string; balad: string; google: string };
+};
+
+export type Stroll = {
+  anchor?: { sid: number; name: string; mall: string | null; lat: number; lon: number };
+  stops: StrollStop[];
+  total_minutes?: number;
+  summary?: string;
+  categories?: string[];
+  note: string;
 };

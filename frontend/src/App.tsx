@@ -1,26 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { get, stream } from "./api";
 import { CompareSheet, ProductSheet } from "./components/Products";
 import { AboutSheet } from "./components/AboutSheet";
-import { ContextBar } from "./components/ContextBar";
+import { ctxChanges, FiltersButton, FiltersSheet, PlaceChip, RouteSheet } from "./components/ContextBar";
 import { DesktopAside } from "./components/DesktopAside";
 import { RadishLogo } from "./components/Logo";
-import { AgentBlock, Feed } from "./components/Feed";
+import { AgentBlock, Feed, Home, type FeedHandlers } from "./components/Feed";
 import { InquiryView, type InquiryState } from "./components/InquiryView";
 import { ShopSheet } from "./components/ShopSheet";
 import { ShopsView } from "./components/ShopsView";
 import { VisitView } from "./components/VisitView";
 import { fa } from "./fmt";
 import { Icon } from "./icons";
-import type { Ctx, FeedItem, Meta, ProductCard } from "./types";
+import type { Authenticity, Bargain, Ctx, FeedItem, Meta, ProductCard } from "./types";
 
 type Step = "discover" | "shops" | "inquiry" | "visit";
 type AgentItem = Extract<FeedItem, { kind: "agent" }>;
-type SheetState = null | { kind: "shop"; sid: number } | { kind: "product"; pid: number } | { kind: "compare" } | { kind: "about" };
+type SheetState = null | { kind: "shop"; sid: number; auth?: Authenticity } | { kind: "product"; pid: number } | { kind: "compare" } | { kind: "about" } | { kind: "route" } | { kind: "filters" };
 
 const DEFAULT_CTX: Ctx = {
   lat: 35.6998, lon: 51.4197, place: "میدان فردوسی", radius_km: 5, budget_min: null, budget_max: null,
   visit: "now", installments_only: false, torob_pay_only: false, open_only: false,
+  range_mode: "time", range_minutes: 20, travel_mode: "car", originality: "any",
 };
 const STEPS: { key: Step; label: string }[] = [
   { key: "discover", label: "انتخاب کالا" },
@@ -29,7 +30,7 @@ const STEPS: { key: Step; label: string }[] = [
   { key: "visit", label: "مراجعه" },
 ];
 const PLACEHOLDER: Record<Step, string> = {
-  discover: "مثلاً: گوشی تا ۲۰ میلیون با باتری قوی",
+  discover: "جواب بده یا چیز دیگه‌ای بپرس…",
   shops: "مثلاً: فقط قسطی‌ها رو نشون بده",
   inquiry: "سؤالی دربارهٔ این فروشگاه‌ها دارید؟",
   visit: "مثلاً: فردا صبح می‌رم، دوباره بچین",
@@ -48,6 +49,25 @@ function loadCtx(): Ctx {
 let seq = 0;
 const nid = () => `i${Date.now().toString(36)}${(seq++).toString(36)}`;
 
+/** iOS Safari ignores interactive-widget, so lift the bottom bar by the keyboard height it reports. */
+function useKeyboardInset() {
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      document.documentElement.style.setProperty("--kb", `${Math.round(kb)}px`);
+    };
+    vv.addEventListener("resize", update);
+    vv.addEventListener("scroll", update);
+    update();
+    return () => {
+      vv.removeEventListener("resize", update);
+      vv.removeEventListener("scroll", update);
+    };
+  }, []);
+}
+
 export default function App() {
   const [meta, setMeta] = useState<Meta | null>(null);
   const [ctx, setCtxState] = useState<Ctx>(loadCtx);
@@ -57,6 +77,7 @@ export default function App() {
   const [pid, setPid] = useState<number | null>(null);
   const [shopPicks, setShopPicks] = useState<{ sid: number; why: string }[]>([]);
   const [shopMsg, setShopMsg] = useState<string | null>(null);
+  const [shopFocus, setShopFocus] = useState<number | null>(null);
   const [compare, setCompare] = useState<number[]>([]);
   const [inq, setInq] = useState<InquiryState | null>(null);
   const [visit, setVisit] = useState<{ pid: number | null; sids: number[]; confirmed: Record<number, unknown> | null } | null>(null);
@@ -70,10 +91,14 @@ export default function App() {
   const [productsKey, setProductsKey] = useState<string | null>(null);
   const firstNeed = useRef<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const stick = useRef(true); // was the reader at the bottom of the chat the last time they scrolled?
+  const settled = useRef<Set<string>>(new Set());
   const demo = new URLSearchParams(window.location.search).has("demo");
   const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
   const speech = !!SR;
   const [listening, setListening] = useState(false);
+  useKeyboardInset();
+
   const listen = () => {
     if (!SR || listening) return;
     const rec = new SR();
@@ -93,6 +118,33 @@ export default function App() {
   useEffect(() => {
     get<Meta>("/api/meta").then(setMeta).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    const onScroll = () => {
+      stick.current = document.documentElement.scrollHeight - (window.scrollY + window.innerHeight) < 160;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Follow the answer while it streams; when it lands, show its top if it is taller than the screen.
+  useLayoutEffect(() => {
+    if (step !== "discover") return;
+    const last = [...feed].reverse().find((f) => f.kind === "agent") as AgentItem | undefined;
+    if (!last) return;
+    if (last.pending) {
+      if (stick.current) endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+      return;
+    }
+    if (settled.current.has(last.id)) return;
+    settled.current.add(last.id);
+    if (!stick.current) return;
+    const el = document.querySelector(`.agent[data-id="${last.id}"]`) as HTMLElement | null;
+    if (!el) return;
+    const room = window.innerHeight - 190; // sticky header above, composer below
+    if (el.offsetHeight > room) el.scrollIntoView({ block: "start", behavior: "smooth" });
+    else endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
+  }, [feed, step]);
 
   const setCtx = useCallback((c: Ctx) => {
     ctxRef.current = c;
@@ -115,10 +167,11 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const openShops = (p: number, picks: { sid: number; why: string }[] = [], msg: string | null = null) => {
+  const openShops = (p: number, picks: { sid: number; why: string }[] = [], msg: string | null = null, focus: number | null = null) => {
     setPid(p);
     setShopPicks(picks);
     setShopMsg(msg);
+    setShopFocus(focus);
     setSheet(null);
     go("shops");
   };
@@ -133,7 +186,7 @@ export default function App() {
     go("visit");
   };
 
-  const prefKey = (c: Ctx) => [c.lat, c.lon, c.radius_km, c.budget_min, c.budget_max, c.installments_only].join("|");
+  const prefKey = (c: Ctx) => [c.lat, c.lon, c.range_mode, c.range_minutes, c.radius_km, c.travel_mode, c.budget_min, c.budget_max, c.installments_only, c.originality].join("|");
 
   const send = async (raw: string) => {
     const text = raw.trim();
@@ -141,19 +194,20 @@ export default function App() {
     if (!firstNeed.current) firstNeed.current = text;
     setInput("");
     setAskOpen(false);
+    (document.activeElement as HTMLElement | null)?.blur?.();
     const aid = nid();
     const uid = nid();
     const t0 = performance.now();
+    const before = ctxRef.current;
+    stick.current = true;
     setFeed((f) => [...f, { kind: "user", id: uid, text }, { kind: "agent", id: aid, steps: [], pending: true }]);
-    if (step === "discover") {
-      window.setTimeout(() => document.querySelector(`[data-id="${uid}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
-    }
     if (step !== "discover") setOverlay(aid);
     setBusy(true);
     const patch = (fn: (a: AgentItem) => AgentItem) =>
       setFeed((f) => f.map((x) => (x.id === aid && x.kind === "agent" ? fn(x) : x)));
     try {
-      await stream("/api/chat", { session_id: session.current, text, ctx, ui: { step, pid, compare } }, (ev) => {
+      await stream("/api/chat", { session_id: session.current, text, ctx: ctxRef.current, ui: { step, pid, compare } }, (ev) => {
+        if (ev.bargain && ["ask", "products", "message", "shops"].includes(ev.type)) patch((a) => ({ ...a, bargain: ev.bargain }));
         switch (ev.type) {
           case "session":
             session.current = ev.session_id;
@@ -173,7 +227,8 @@ export default function App() {
             });
             break;
           case "ctx":
-            setCtx(ev.ctx);
+            setCtx({ ...DEFAULT_CTX, ...ev.ctx });
+            patch((a) => ({ ...a, applied: ctxChanges(before, { ...DEFAULT_CTX, ...ev.ctx }, meta) }));
             break;
           case "ask":
             patch((a) => ({ ...a, message: ev.message, ask: ev.questions }));
@@ -212,11 +267,13 @@ export default function App() {
     if (busy) return;
     session.current = null;
     firstNeed.current = null;
+    settled.current.clear();
     setFeed([]);
     setCompare([]);
     setPid(null);
     setShopPicks([]);
     setShopMsg(null);
+    setShopFocus(null);
     setInq(null);
     setVisit(null);
     setSheet(null);
@@ -237,83 +294,84 @@ export default function App() {
     });
   };
 
+  const started = feed.length > 0 || pid != null;
   const reachable: Record<Step, boolean> = { discover: true, shops: pid != null, inquiry: inq != null, visit: visit != null };
   const overlayItem = overlay ? (feed.find((f) => f.id === overlay) as AgentItem | undefined) : undefined;
-  const handlers = {
+  const handlers: FeedHandlers = {
     ctx,
     compare,
     busy,
     onSend: send,
     onShops: (p: ProductCard) => openShops(p.pid),
     onCompare: toggleCompare,
-    onDetails: (p: number) => setSheet({ kind: "product", pid: p }),
     onAnswered: (id: string) => setFeed((f) => f.map((x) => (x.id === id && x.kind === "agent" ? { ...x, answered: true } : x))),
     onOpenShops: (p: number) => openShops(p, shopPicks, shopMsg),
     onOpenInquiry: () => go("inquiry"),
+    onBargain: (b: Bargain) => {
+      const target = b.pid ?? pid;
+      if (target != null) openShops(target, shopPicks, shopMsg, b.sid);
+    },
+    onEditFilters: () => setSheet({ kind: "filters" }),
   };
+  const stepIdx = STEPS.findIndex((x) => x.key === step);
+  const openShop = (sid: number, offer?: { authenticity?: Authenticity }) => setSheet({ kind: "shop", sid, auth: offer?.authenticity });
 
   return (
-    <div className="app">
+    <div className={"app" + (started ? " started" : "")}>
       <DesktopAside />
       <header className="top">
-        <div className="brandrow">
-          <div className="wordmark">
-            <RadishLogo size={30} />
+        <div className="bar">
+          <div className="wordmark" aria-label="ترب، خرید حضوری">
+            <RadishLogo size={28} />
             <b>ترب</b>
             <i className="sep" />
             <span>خرید حضوری</span>
           </div>
           <div className="spacer" />
-          {meta && !meta.llm.available && <span className="pill amber">حالت ساده</span>}
-          {step !== "discover" && (
-            <button className="askbtn" onClick={() => setAskOpen(true)} aria-label="از دستیار بپرس">
-              <Icon name="spark" size={16} /> بپرس
-            </button>
-          )}
-          {(feed.length > 0 || pid != null) && (
-            <button className="iconbtn" onClick={reset} aria-label="شروع دوباره">
-              <Icon name="refresh" size={19} />
-            </button>
-          )}
+          <PlaceChip ctx={ctx} onOpen={() => setSheet({ kind: "route" })} />
+          <FiltersButton ctx={ctx} onOpen={() => setSheet({ kind: "filters" })} />
           <button className="iconbtn" onClick={() => setSheet({ kind: "about" })} aria-label="دربارهٔ داده و روش کار">
-            <Icon name="info" size={20} />
+            <Icon name="info" size={21} />
           </button>
         </div>
-        <nav className="journey" aria-label="مراحل خرید">
-          {STEPS.map((s, i) => {
-            const idx = STEPS.findIndex((x) => x.key === step);
-            return (
-              <button key={s.key} className={"jstep" + (s.key === step ? " active" : i < idx ? " done" : "")} disabled={!reachable[s.key]} onClick={() => go(s.key)}>
-                <span className="bar" />
-                <span>{fa(i + 1)}. {s.label}</span>
+        {started && (
+          <nav className="journey" aria-label="مراحل خرید">
+            {STEPS.map((s, i) => (
+              <button key={s.key} className={"jstep" + (s.key === step ? " active" : i < stepIdx ? " done" : "")} disabled={!reachable[s.key]}
+                aria-current={s.key === step ? "step" : undefined} onClick={() => go(s.key)}>
+                {s.label}
               </button>
-            );
-          })}
-        </nav>
-        <ContextBar ctx={ctx} setCtx={setCtx} meta={meta} toast={toast} />
+            ))}
+            <button className="jreset" onClick={reset} disabled={busy} aria-label="شروع دوباره"><Icon name="refresh" size={18} /></button>
+          </nav>
+        )}
       </header>
 
       <main>
         {step === "discover" && (
           <>
-            <Feed items={feed} meta={meta} {...handlers}
-              stale={!busy && productsKey != null && productsKey !== prefKey(ctx)}
-              onRefresh={() => send("ترجیحاتم را عوض کردم؛ با شرایط جدید دوباره پیشنهاد بده")} />
-            <div ref={endRef} />
+            {feed.length === 0 ? <Home meta={meta} busy={busy} onSend={send} /> : (
+              <Feed items={feed} {...handlers}
+                stale={!busy && productsKey != null && productsKey !== prefKey(ctx)}
+                onRefresh={() => send("ترجیحاتم را عوض کردم؛ با شرایط جدید دوباره پیشنهاد بده")} />
+            )}
+            <div ref={endRef} className="endref" />
           </>
         )}
         {step === "shops" && pid != null && (
           <ShopsView
+            key={pid}
             pid={pid}
             ctx={ctx}
             setCtx={setCtx}
             picks={shopPicks}
             agentMsg={shopMsg}
-            onOpenShop={(sid) => setSheet({ kind: "shop", sid })}
+            focus={shopFocus}
+            onOpenShop={openShop}
             onInquiry={(sids) => startInquiry(pid, sids)}
             onVisit={(sids) => startVisit(pid, sids, null)}
             onProduct={(p) => openShops(p.pid)}
-            onBack={() => go("discover")}
+            onDetails={() => setSheet({ kind: "product", pid })}
           />
         )}
         {step === "inquiry" && inq && (
@@ -324,22 +382,22 @@ export default function App() {
             ctx={ctx}
             demo={demo}
             toast={toast}
-            onOpenShop={(sid) => setSheet({ kind: "shop", sid })}
+            onOpenShop={openShop}
             onVisit={(sids, confirmed) => startVisit(inq.pid, sids, confirmed)}
             onRestart={(sids) => startInquiry(inq.pid, sids)}
             onProduct={(p) => openShops(p.pid)}
           />
         )}
         {step === "visit" && visit && (
-          <VisitView pid={visit.pid} sids={visit.sids} confirmed={visit.confirmed} ctx={ctx} toast={toast} onOpenShop={(sid) => setSheet({ kind: "shop", sid })} />
+          <VisitView pid={visit.pid} sids={visit.sids} confirmed={visit.confirmed} ctx={ctx} toast={toast} onOpenShop={(sid) => openShop(sid)} />
         )}
       </main>
 
       {step === "discover" && compare.length > 0 && (
         <div className="comparebar fadein">
-          <Icon name="compare" />
-          <span className="grow small">{fa(compare.length)} کالا برای مقایسه</span>
-          <button className="small" style={{ color: "#bbb" }} onClick={() => setCompare([])}>پاک کردن</button>
+          <Icon name="compare" size={18} />
+          <span className="grow">{fa(compare.length)} کالا برای مقایسه</span>
+          <button className="textbtn light" onClick={() => setCompare([])}>پاک کردن</button>
           <button className="btn sm" disabled={compare.length < 2} onClick={() => setSheet({ kind: "compare" })}>مقایسه کن</button>
         </div>
       )}
@@ -347,43 +405,57 @@ export default function App() {
       {step === "discover" ? (
         <div className="composer">
           <form onSubmit={(e) => { e.preventDefault(); send(input); }}>
-            <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={listening ? "در حال شنیدن…" : PLACEHOLDER[step]} enterKeyHint="send" aria-label="پیام به دستیار" />
-            {speech && !input.trim() ? (
-              <button type="button" className={"sendbtn" + (listening ? " rec" : "")} onClick={listen} disabled={busy} aria-label="گفتن با صدا"><Icon name="mic" size={20} /></button>
-            ) : (
-              <button className="sendbtn" type="submit" disabled={busy || !input.trim()} aria-label="ارسال"><Icon name="send" size={20} /></button>
+            <input value={input} onChange={(e) => setInput(e.target.value)} enterKeyHint="send" aria-label="پیام به دستیار"
+              placeholder={listening ? "در حال شنیدن…" : feed.length ? PLACEHOLDER.discover : "اسم کالا یا نیازت رو بنویس…"} />
+            {speech && (
+              <button type="button" className={"micbtn" + (listening ? " rec" : "")} onClick={listen} disabled={busy} aria-label="گفتن با صدا"><Icon name="mic" size={20} /></button>
             )}
+            <button className="sendbtn" type="submit" disabled={busy || !input.trim()} aria-label="ارسال"><Icon name="up" size={20} stroke={2} /></button>
           </form>
         </div>
       ) : (
         <>
-          {overlayItem && (
-            <div className="sheet" style={{ maxHeight: "60dvh", bottom: 70, borderRadius: 18, width: "min(456px, calc(100vw - 24px))", boxShadow: "0 10px 40px rgba(0,0,0,.2)", zIndex: 40 }}>
-              <div className="sheethead">
-                <h2 style={{ fontSize: 14 }}>پاسخ دستیار</h2>
-                <button className="iconbtn" onClick={() => setOverlay(null)} aria-label="بستن"><Icon name="x" /></button>
-              </div>
-              <div className="sheetbody"><AgentBlock it={overlayItem} {...handlers} /></div>
-            </div>
+          {!askOpen && !overlayItem && (
+            <button className="fab" onClick={() => setAskOpen(true)} aria-label="از دستیار بپرس">
+              <Icon name="spark" size={20} stroke={1.8} /> بپرس
+            </button>
           )}
-          {askOpen ? (
-            <div className="composer" style={{ zIndex: 41 }}>
-              <form onSubmit={(e) => { e.preventDefault(); send(input); }}>
-                <button type="button" className="iconbtn" onClick={() => setAskOpen(false)} aria-label="بستن"><Icon name="x" /></button>
-                <input autoFocus value={input} onChange={(e) => setInput(e.target.value)} placeholder={PLACEHOLDER[step]} enterKeyHint="send" />
-                <button className="sendbtn" type="submit" disabled={busy || !input.trim()} aria-label="ارسال"><Icon name="send" size={20} /></button>
-              </form>
-            </div>
-          ) : null}
+          {overlayItem && (
+            <>
+              <div className="backdrop light" onClick={() => setOverlay(null)} />
+              <div className="sheet answer" role="dialog" aria-label="پاسخ دستیار">
+                <div className="sheethead">
+                  <span className="grab" />
+                  <h2>دستیار ترب</h2>
+                  <button className="iconbtn" onClick={() => setOverlay(null)} aria-label="بستن"><Icon name="x" size={20} /></button>
+                </div>
+                <div className="sheetbody"><AgentBlock it={overlayItem} {...handlers} /></div>
+              </div>
+            </>
+          )}
+          {askOpen && (
+            <>
+              <div className="backdrop light" onClick={() => setAskOpen(false)} />
+              <div className="composer floating">
+                <form onSubmit={(e) => { e.preventDefault(); send(input); }}>
+                  <input autoFocus value={input} onChange={(e) => setInput(e.target.value)} placeholder={PLACEHOLDER[step]} enterKeyHint="send" aria-label="پیام به دستیار" />
+                  <button type="button" className="micbtn" onClick={() => setAskOpen(false)} aria-label="بستن"><Icon name="x" size={20} /></button>
+                  <button className="sendbtn" type="submit" disabled={busy || !input.trim()} aria-label="ارسال"><Icon name="up" size={20} stroke={2} /></button>
+                </form>
+              </div>
+            </>
+          )}
         </>
       )}
 
+      {sheet?.kind === "route" && <RouteSheet ctx={ctx} setCtx={setCtx} meta={meta} toast={toast} onClose={() => setSheet(null)} />}
+      {sheet?.kind === "filters" && <FiltersSheet ctx={ctx} setCtx={setCtx} meta={meta} onClose={() => setSheet(null)} />}
       {sheet?.kind === "shop" && (
-        <ShopSheet sid={sheet.sid} pid={step === "visit" ? visit?.pid ?? pid : step === "inquiry" ? inq?.pid ?? pid : pid} ctx={ctx}
+        <ShopSheet sid={sheet.sid} auth={sheet.auth} pid={step === "visit" ? visit?.pid ?? pid : step === "inquiry" ? inq?.pid ?? pid : pid} ctx={ctx}
           onClose={() => setSheet(null)}
           onInquiry={(sid) => pid != null && startInquiry(inq?.pid ?? pid, [sid])}
           onVisit={(sid) => startVisit(pid, [sid], null)}
-          onOpenShop={(sid) => setSheet({ kind: "shop", sid })} />
+          onOpenShop={(sid) => openShop(sid)} />
       )}
       {sheet?.kind === "product" && (
         <ProductSheet pid={sheet.pid} ctx={ctx} onClose={() => setSheet(null)} onShops={() => openShops(sheet.pid)} />
@@ -392,8 +464,8 @@ export default function App() {
         <CompareSheet pids={compare} ctx={ctx} need={firstNeed.current} onClose={() => setSheet(null)}
           onShops={(p) => openShops(p)} onRemove={(p) => setCompare((c) => c.filter((x) => x !== p))} />
       )}
-      {sheet?.kind === "about" && <AboutSheet meta={meta} onClose={() => setSheet(null)} />}
-      {toastMsg && <div className="toast">{toastMsg}</div>}
+      {sheet?.kind === "about" && <AboutSheet meta={meta} onClose={() => setSheet(null)} onRestart={started ? () => { setSheet(null); reset(); } : undefined} />}
+      {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
     </div>
   );
 }

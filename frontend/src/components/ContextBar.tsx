@@ -1,112 +1,176 @@
 import { useState } from "react";
 import { Icon } from "../icons";
-import { fa, parseToman, short } from "../fmt";
-import type { Ctx, Meta } from "../types";
+import { fa, parseToman, short, shortPlace } from "../fmt";
+import type { Ctx, Meta, TravelMode } from "../types";
+import { MODE_ICON } from "./bits";
 import { Sheet } from "./Sheet";
-
-type Props = { ctx: Ctx; setCtx: (c: Ctx) => void; meta: Meta | null; toast: (s: string) => void };
 
 const BUDGETS = [5_000_000, 20_000_000, 50_000_000, 100_000_000, 200_000_000];
 const FERDOWSI = { lat: 35.6998, lon: 51.4197 };
+const MODES: Record<TravelMode, string> = { walk: "پیاده", car: "با ماشین", transit: "با مترو و اتوبوس" };
+const PRESETS = [10, 20, 30, 45, 60];
 
 export function activeFilters(ctx: Ctx): number {
   return (ctx.visit !== "now" ? 1 : 0) + (ctx.budget_max ? 1 : 0) + (ctx.installments_only ? 1 : 0) +
-    (ctx.open_only ? 1 : 0) + (ctx.torob_pay_only ? 1 : 0);
+    (ctx.open_only ? 1 : 0) + (ctx.torob_pay_only ? 1 : 0) + (ctx.originality === "original_only" ? 1 : 0);
 }
 
-/** Two controls only: where you are, and one "filters" sheet for everything else. */
-export function ContextBar({ ctx, setCtx, meta, toast }: Props) {
-  const [open, setOpen] = useState<null | "place" | "filters">(null);
-  const n = activeFilters(ctx);
+export function rangeText(ctx: Ctx): string {
+  return ctx.range_mode === "km" ? `${fa(ctx.radius_km)} کیلومتر` : `${fa(ctx.range_minutes)} دقیقه`;
+}
+
+/** What the assistant changed in this turn, as short chip labels («تا ۲۰۰ میلیون», «فقط قسطی»). */
+export function ctxChanges(a: Ctx, b: Ctx, meta: Meta | null): string[] {
+  const out: string[] = [];
+  if (b.place !== a.place) out.push(shortPlace(b.place));
+  if (b.travel_mode !== a.travel_mode) out.push(MODES[b.travel_mode]);
+  if (b.range_mode !== a.range_mode || b.range_minutes !== a.range_minutes || b.radius_km !== a.radius_km) out.push(`تا ${rangeText(b)}`);
+  if (b.budget_max !== a.budget_max && b.budget_max) out.push(`تا ${short(b.budget_max)}`);
+  if (b.budget_max !== a.budget_max && !b.budget_max) out.push("بدون سقف بودجه");
+  if (b.installments_only !== a.installments_only) out.push(b.installments_only ? "فقط قسطی" : "قسطی و نقدی");
+  if (b.originality !== a.originality) out.push(b.originality === "original_only" ? "فقط کالای اصل" : "اصل و غیراصل");
+  if (b.open_only !== a.open_only && b.open_only) out.push("فقط باز");
+  if (b.torob_pay_only !== a.torob_pay_only && b.torob_pay_only) out.push("فقط ترب‌پی");
+  if (b.visit !== a.visit) out.push(meta?.visit_presets?.[b.visit] ?? b.visit);
+  return out;
+}
+
+/** Header chip: where you are, how you travel and how far you will go. One tap opens a quick sheet. */
+export function PlaceChip({ ctx, onOpen }: { ctx: Ctx; onOpen: () => void }) {
   return (
-    <>
-      <div className="ctxbar">
-        <button className="chip grow-chip" onClick={() => setOpen("place")}>
-          <Icon name="pin" size={15} />
-          <span className="ellipsis">{ctx.place.split(" (")[0]}</span>
-          <small>تا {fa(ctx.radius_km)} کیلومتر</small>
-          <Icon name="down" size={14} />
-        </button>
-        <button className={"chip" + (n ? " on" : "")} onClick={() => setOpen("filters")}>
-          <Icon name="filter" size={15} />
-          فیلترها{n ? ` (${fa(n)})` : ""}
-        </button>
-      </div>
-
-      {open === "place" && (
-        <Sheet title="کجا هستید؟" onClose={() => setOpen(null)}>
-          <button
-            className="btn secondary block"
-            onClick={() => {
-              if (!navigator.geolocation) return toast("مرورگر موقعیت‌یابی را پشتیبانی نمی‌کند");
-              navigator.geolocation.getCurrentPosition(
-                (p) => {
-                  const { latitude: lat, longitude: lon } = p.coords;
-                  if (Math.hypot(lat - FERDOWSI.lat, (lon - FERDOWSI.lon) * 0.81) > 0.5) {
-                    toast("فعلاً فقط فروشگاه‌های تهران را داریم؛ یکی از محله‌ها را انتخاب کنید");
-                    return;
-                  }
-                  setCtx({ ...ctx, lat, lon, place: "موقعیت فعلی من" });
-                  setOpen(null);
-                },
-                () => toast("دسترسی به موقعیت داده نشد؛ یکی از محله‌ها را انتخاب کنید"),
-                { enableHighAccuracy: true, timeout: 8000 }
-              );
-            }}
-          >
-            <Icon name="locate" /> موقعیت فعلی من
-          </button>
-          <div className="list">
-            {(meta?.places ?? []).map((p) => (
-              <button key={p.id} className={"li" + (ctx.place === p.label ? " on" : "")}
-                onClick={() => { setCtx({ ...ctx, lat: p.lat, lon: p.lon, place: p.label }); setOpen(null); }}>
-                <span className="grow">{p.label}</span>
-                {ctx.place === p.label && <Icon name="check" size={16} />}
-              </button>
-            ))}
-          </div>
-          <div className="card pad stack">
-            <div className="row between">
-              <span className="bold">تا چه فاصله‌ای؟</span>
-              <span className="bold" style={{ color: "var(--blue)" }}>{fa(ctx.radius_km)} کیلومتر</span>
-            </div>
-            <input className="range" type="range" min={1} max={20} step={1} value={ctx.radius_km}
-              onChange={(e) => setCtx({ ...ctx, radius_km: +e.target.value })} />
-          </div>
-        </Sheet>
-      )}
-
-      {open === "filters" && <FiltersSheet ctx={ctx} setCtx={setCtx} meta={meta} onClose={() => setOpen(null)} />}
-    </>
+    <button className="placechip" onClick={onOpen} aria-label="محل، نوع رفت‌وآمد و محدوده">
+      <Icon name={MODE_ICON[ctx.travel_mode] ?? "pin"} size={18} />
+      <span className="pc-txt">
+        <b className="ellipsis">{shortPlace(ctx.place)}</b>
+        <small className="ellipsis">تا {rangeText(ctx)}</small>
+      </span>
+    </button>
   );
 }
 
-function FiltersSheet({ ctx, setCtx, meta, onClose }: { ctx: Ctx; setCtx: (c: Ctx) => void; meta: Meta | null; onClose: () => void }) {
+export function RouteSheet({ ctx, setCtx, meta, toast, onClose }: { ctx: Ctx; setCtx: (c: Ctx) => void; meta: Meta | null; toast: (s: string) => void; onClose: () => void }) {
+  const [allPlaces, setAllPlaces] = useState(false);
+  const places = meta?.places ?? [];
+  const modes = (meta?.travel_modes ?? MODES) as Record<TravelMode, string>;
+  const presets = meta?.range_minutes_presets ?? PRESETS;
+  const shown = allPlaces ? places : places.filter((p, i) => i < 5 || p.label === ctx.place);
+  const locate = () => {
+    if (!navigator.geolocation) return toast("مرورگر موقعیت‌یابی را پشتیبانی نمی‌کند");
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        const { latitude: lat, longitude: lon } = p.coords;
+        if (Math.hypot(lat - FERDOWSI.lat, (lon - FERDOWSI.lon) * 0.81) > 0.5) {
+          toast("فعلاً فقط فروشگاه‌های تهران را داریم؛ یکی از محله‌ها را انتخاب کنید");
+          return;
+        }
+        setCtx({ ...ctx, lat, lon, place: "موقعیت فعلی من" });
+      },
+      () => toast("دسترسی به موقعیت داده نشد؛ یکی از محله‌ها را انتخاب کنید"),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  };
+  return (
+    <Sheet title="از کجا و چطور می‌روید؟" onClose={onClose} footer={<button className="btn block" onClick={onClose}>نمایش نتیجه</button>}>
+      <section className="sec">
+        <h3>چطور می‌روید؟</h3>
+        <div className="segmented three">
+          {(Object.keys(modes) as TravelMode[]).map((m) => (
+            <button key={m} className={ctx.travel_mode === m ? "on" : ""} onClick={() => setCtx({ ...ctx, travel_mode: m })}>
+              <Icon name={MODE_ICON[m]} size={18} />
+              {modes[m]}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="sec">
+        <h3>تا چقدر راه؟</h3>
+        {ctx.range_mode === "time" ? (
+          <div className="chips">
+            {presets.map((m) => (
+              <button key={m} className={"chip" + (ctx.range_minutes === m ? " on" : "")} onClick={() => setCtx({ ...ctx, range_mode: "time", range_minutes: m })}>
+                {fa(m)} دقیقه
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="stack" style={{ gap: 4 }}>
+            <div className="row between"><span className="meta">فاصلهٔ مستقیم</span><b className="blue-txt">{fa(ctx.radius_km)} کیلومتر</b></div>
+            <input className="range" type="range" min={1} max={20} step={1} value={ctx.radius_km} aria-label="شعاع به کیلومتر"
+              onChange={(e) => setCtx({ ...ctx, radius_km: +e.target.value })} />
+          </div>
+        )}
+        <button className="textbtn" onClick={() => setCtx({ ...ctx, range_mode: ctx.range_mode === "time" ? "km" : "time" })}>
+          {ctx.range_mode === "time" ? "به‌جای زمان، با کیلومتر" : "با زمان رسیدن"}
+        </button>
+      </section>
+
+      <section className="sec">
+        <h3>از کجا؟</h3>
+        <div className="list">
+          <button className="li" onClick={locate}>
+            <Icon name="locate" size={18} />
+            <span className="grow">موقعیت فعلی من</span>
+            {ctx.place === "موقعیت فعلی من" && <Icon name="check" size={18} className="blue-txt" />}
+          </button>
+          {shown.map((p) => (
+            <button key={p.id} className={"li" + (ctx.place === p.label ? " on" : "")}
+              onClick={() => setCtx({ ...ctx, lat: p.lat, lon: p.lon, place: p.label })}>
+              <Icon name="pin" size={18} />
+              <span className="grow">{p.label}</span>
+              {ctx.place === p.label && <Icon name="check" size={18} />}
+            </button>
+          ))}
+          {!allPlaces && places.length > shown.length && (
+            <button className="li more" onClick={() => setAllPlaces(true)}>
+              <span className="grow">{fa(places.length - shown.length)} محلهٔ دیگر</span>
+              <Icon name="down" size={16} />
+            </button>
+          )}
+        </div>
+      </section>
+    </Sheet>
+  );
+}
+
+/** Filter icon in the header with a count; opens everything that narrows results. */
+export function FiltersButton({ ctx, onOpen }: { ctx: Ctx; onOpen: () => void }) {
+  const n = activeFilters(ctx);
+  return (
+    <button className={"iconbtn" + (n ? " on" : "")} onClick={onOpen} aria-label={n ? `فیلترها، ${fa(n)} فعال` : "فیلترها"}>
+      <Icon name="filter" size={21} />
+      {n > 0 && <i className="count">{fa(n)}</i>}
+    </button>
+  );
+}
+
+export function FiltersSheet({ ctx, setCtx, meta, onClose }: { ctx: Ctx; setCtx: (c: Ctx) => void; meta: Meta | null; onClose: () => void }) {
   const [custom, setCustom] = useState("");
   const toggle = (k: "installments_only" | "open_only" | "torob_pay_only") => setCtx({ ...ctx, [k]: !ctx[k] });
   return (
     <Sheet title="فیلترها" onClose={onClose}
       actions={activeFilters(ctx) ? (
-        <button className="linkbtn" onClick={() => setCtx({ ...ctx, visit: "now", budget_max: null, budget_min: null, installments_only: false, open_only: false, torob_pay_only: false })}>
+        <button className="textbtn" onClick={() => setCtx({ ...ctx, visit: "now", budget_max: null, budget_min: null, installments_only: false, open_only: false, torob_pay_only: false, originality: "any" })}>
           حذف همه
         </button>
-      ) : undefined}>
-      <div className="card pad stack">
-        <div className="bold">کی می‌روید؟</div>
-        <div className="opts">
+      ) : undefined}
+      footer={<button className="btn block" onClick={onClose}>نمایش نتیجه</button>}>
+      <section className="sec">
+        <h3>کی می‌روید؟</h3>
+        <div className="chips">
           {Object.entries(meta?.visit_presets ?? { now: "همین الان" }).map(([k, label]) => (
-            <button key={k} className={"opt" + (ctx.visit === k ? " sel" : "")} onClick={() => setCtx({ ...ctx, visit: k })}>{label}</button>
+            <button key={k} className={"chip" + (ctx.visit === k ? " on" : "")} onClick={() => setCtx({ ...ctx, visit: k })}>{label}</button>
           ))}
         </div>
-        <div className="tiny muted">باز بودن هر فروشگاه برای همان زمانی که می‌رسید حساب می‌شود.</div>
-      </div>
+        <p className="meta" style={{ margin: 0 }}>باز بودن هر فروشگاه برای همان زمانی که می‌رسید حساب می‌شود.</p>
+      </section>
 
-      <div className="card pad stack">
-        <div className="bold">سقف بودجه</div>
-        <div className="opts">
-          <button className={"opt" + (!ctx.budget_max ? " sel" : "")} onClick={() => setCtx({ ...ctx, budget_max: null, budget_min: null })}>مهم نیست</button>
+      <section className="sec">
+        <h3>سقف بودجه</h3>
+        <div className="chips">
+          <button className={"chip" + (!ctx.budget_max ? " on" : "")} onClick={() => setCtx({ ...ctx, budget_max: null, budget_min: null })}>مهم نیست</button>
           {BUDGETS.map((b) => (
-            <button key={b} className={"opt" + (ctx.budget_max === b ? " sel" : "")} onClick={() => setCtx({ ...ctx, budget_max: b })}>
+            <button key={b} className={"chip" + (ctx.budget_max === b ? " on" : "")} onClick={() => setCtx({ ...ctx, budget_max: b })}>
               تا {short(b)}
             </button>
           ))}
@@ -116,17 +180,18 @@ function FiltersSheet({ ctx, setCtx, meta, onClose }: { ctx: Ctx; setCtx: (c: Ct
           const v = parseToman(custom);
           if (v) setCtx({ ...ctx, budget_max: v < 1000 ? v * 1_000_000 : v });
         }}>
-          <input className="input grow" placeholder="مبلغ دلخواه، مثلاً ۱۵ میلیون" value={custom} onChange={(e) => setCustom(e.target.value)} />
-          <button className="btn sm secondary" type="submit">ثبت</button>
+          <input className="input grow" placeholder="مبلغ دلخواه، مثلاً ۱۵ میلیون" value={custom} onChange={(e) => setCustom(e.target.value)} aria-label="سقف بودجهٔ دلخواه" />
+          <button className="btn ghost sm" type="submit">ثبت</button>
         </form>
-      </div>
+      </section>
 
       <div className="list">
-        <Toggle on={ctx.installments_only} onClick={() => toggle("installments_only")} title="فقط خرید قسطی" sub="فروشگاه‌هایی که ترب‌پی، اسنپ‌پی، دیجی‌پی یا تارا دارند" />
+        <Toggle on={ctx.installments_only} onClick={() => toggle("installments_only")} title="فقط خرید قسطی" sub="ترب‌پی، اسنپ‌پی، دیجی‌پی، تارا یا ازکی‌وام" />
+        <Toggle on={ctx.originality === "original_only"} onClick={() => setCtx({ ...ctx, originality: ctx.originality === "original_only" ? "any" : "original_only" })}
+          title="فقط کالای اصل" sub="فروشنده‌هایی که خودشان غیراصل نوشته‌اند یا قیمتشان مشکوک است پنهان می‌شوند" />
         <Toggle on={ctx.open_only} onClick={() => toggle("open_only")} title="فقط فروشگاه‌های باز" sub="در زمانی که می‌رسید" />
         <Toggle on={ctx.torob_pay_only} onClick={() => toggle("torob_pay_only")} title="فقط ترب‌پی" />
       </div>
-      <button className="btn block" onClick={onClose}>نمایش نتیجه</button>
     </Sheet>
   );
 }
@@ -136,7 +201,7 @@ function Toggle({ on, onClick, title, sub }: { on: boolean; onClick: () => void;
     <button className="li" onClick={onClick} role="switch" aria-checked={on}>
       <span className="grow stack" style={{ gap: 0 }}>
         <span>{title}</span>
-        {sub && <span className="tiny muted" style={{ fontWeight: 400 }}>{sub}</span>}
+        {sub && <span className="meta" style={{ fontWeight: 400 }}>{sub}</span>}
       </span>
       <span className={"switch" + (on ? " on" : "")}><i /></span>
     </button>

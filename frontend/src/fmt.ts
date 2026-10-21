@@ -45,6 +45,18 @@ export function jalali(tsSeconds: number | undefined | null): string {
   }
 }
 
+/** "خیابان جمهوری (پاساژ علاءالدین)" -> "خیابان جمهوری"; "میدان فردوسی" -> "فردوسی" for the header chip. */
+export function shortPlace(place: string): string {
+  return place.split(" (")[0].replace(/^(میدان|خیابان|چهارراه)\s+/, "");
+}
+
+/** Tehran metro line colours, keyed by line number ("خط ۱" -> 1). */
+const METRO: Record<number, string> = { 1: "#e0001f", 2: "#2f4389", 3: "#67c5f5", 4: "#f8cf00", 5: "#007e46", 6: "#ef639f", 7: "#7f0b74" };
+export function metroColor(line: string | undefined): string {
+  const n = parseInt((line ?? "").replace(/[۰-۹]/g, (d) => String(FA.indexOf(d))).replace(/\D/g, ""), 10);
+  return METRO[n] ?? "#64748b";
+}
+
 /** Parse a Persian/Latin number typed by the user ("۲۰ میلیون", "20000000"). */
 export function parseToman(s: string): number | null {
   const latin = s.replace(/[۰-۹]/g, (d) => String(FA.indexOf(d))).replace(/[٬,\s]/g, "");

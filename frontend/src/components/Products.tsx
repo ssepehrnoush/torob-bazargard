@@ -3,6 +3,7 @@ import { api } from "../api";
 import { fa, priceRange, short, toman } from "../fmt";
 import { Icon } from "../icons";
 import type { Ctx, ProductCard as PC } from "../types";
+import { AiNote } from "./bits";
 import { Sheet } from "./Sheet";
 
 export function Img({ src, className = "pimg" }: { src: string | null; className?: string }) {
@@ -10,7 +11,7 @@ export function Img({ src, className = "pimg" }: { src: string | null; className
   if (!src || bad) {
     return (
       <div className={className + " ph"}>
-        <Icon name="bag" size={26} />
+        <Icon name="bag" size={24} />
       </div>
     );
   }
@@ -29,33 +30,31 @@ type CardProps = {
   compared: boolean;
   onShops: () => void;
   onCompare: () => void;
-  onDetails: () => void;
 };
 
-/** Torob-style result row: image, name, "از … تومان", "در N فروشگاه نزدیک شما", one line of why. Tap = shops. */
-export function ProductCard({ p, ctx, compared, onShops, onCompare, onDetails }: CardProps) {
+/** Torob search-result row with the assistant's one-line reason. The whole card opens the shops. */
+export function ProductCard({ p, ctx, compared, onShops, onCompare }: CardProps) {
   return (
     <div className="pcard fadein">
-      <button className="top-row" onClick={onShops} style={{ textAlign: "right" }}>
+      <button className="pcard-main" onClick={onShops}>
         <Img src={p.image} />
-        <div className="grow stack" style={{ gap: 2 }}>
+        <div className="grow stack" style={{ gap: 2, minWidth: 0 }}>
           {p.tag && <span className="ptag">{p.tag}</span>}
           <div className="ptitle clamp2">{p.title}</div>
           <div className="price">{p.price_min ? `از ${toman(p.nearby_min_price || p.price_min)}` : "قیمت ثبت نشده"}</div>
-          <div className="shopsline">
+          <div className="meta">
             {availability(p)}
-            {ctx.installments_only && !!p.n_installment && <span className="inst">، {fa(p.n_installment)} قسطی</span>}
+            {!!p.n_installment && <span className={ctx.installments_only ? "blue-txt bold" : ""}> · {fa(p.n_installment)} قسطی</span>}
           </div>
         </div>
       </button>
-      {p.why && <div className="whyline"><Icon name="spark" size={14} /> <span className="clamp2">{p.why}</span></div>}
-      <div className="pactions">
-        <button className="linkbtn" onClick={onDetails}>مشخصات</button>
-        <button className={"linkbtn" + (compared ? " on" : "")} onClick={onCompare}>
-          <Icon name={compared ? "check" : "compare"} size={15} /> {compared ? "در مقایسه" : "مقایسه"}
+      {p.why && <div className="whyline"><Icon name="spark" size={15} stroke={1.8} /> <span className="clamp2">{p.why}</span></div>}
+      <div className="pcard-foot">
+        <button className={"checkline" + (compared ? " on" : "")} onClick={onCompare} aria-pressed={compared}>
+          <span className={"selbox" + (compared ? " on" : "")}>{compared && <Icon name="check" size={13} stroke={2.6} />}</span>
+          مقایسه
         </button>
-        <span className="grow" />
-        <button className="btn sm" onClick={onShops}>فروشگاه‌ها</button>
+        <button className="linkbtn" onClick={onShops}>فروشگاه‌ها <Icon name="left" size={14} /></button>
       </div>
     </div>
   );
@@ -67,44 +66,34 @@ export function ProductSheet({ pid, ctx, onClose, onShops }: { pid: number; ctx:
     api.product(pid, ctx).then(setD).catch(() => setD({ error: true }));
   }, [pid]); // eslint-disable-line
   return (
-    <Sheet title="جزئیات کالا" onClose={onClose}>
-      {!d && <div className="shimmer" style={{ height: 220 }} />}
+    <Sheet title="مشخصات کالا" onClose={onClose} footer={d && !d.error ? <button className="btn block" onClick={onShops}>دیدن فروشگاه‌ها</button> : undefined}>
+      {!d && <div className="shimmer" style={{ height: 220, borderRadius: 16 }} />}
       {d?.error && <div className="empty">اطلاعات کالا دریافت نشد</div>}
       {d && !d.error && (
         <>
           <div className="card pad stack">
-            <div style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+            <div className="gallery">
               {(d.images?.length ? d.images : [d.image]).slice(0, 5).map((u: string, i: number) => (
-                <Img key={i} src={u} className="pimg" />
+                <Img key={i} src={u} className="pimg lg" />
               ))}
             </div>
-            <div className="ptitle">{d.title}</div>
-            <div className="row wrap small muted">
-              {d.brand && <span className="pill">{d.brand}</span>}
-              <span className="pill">{d.category}</span>
+            <div className="ptitle" style={{ fontSize: 15 }}>{d.title}</div>
+            <div className="row wrap" style={{ gap: 6 }}>
+              {d.brand && <span className="tag gray">{d.brand}</span>}
+              <span className="tag gray">{d.category}</span>
             </div>
-            <div className="row between">
-              <div>
-                <div className="tiny muted">بازهٔ قیمت ثبت‌شده در ترب</div>
-                <div className="price">{priceRange(d.price_min, d.price_max)}</div>
-              </div>
-              <div style={{ textAlign: "left" }}>
-                <div className="tiny muted">میانهٔ قیمت</div>
-                <div className="bold">{short(d.price_median)}</div>
-              </div>
+            <div className="kv">
+              <div><span className="meta">بازهٔ قیمت ثبت‌شده در ترب</span><b>{priceRange(d.price_min, d.price_max)}</b></div>
+              <div><span className="meta">میانهٔ قیمت</span><b>{short(d.price_median)}</b></div>
             </div>
-            <div className="small muted">{availability(d, ctx.radius_km)}</div>
-            <button className="btn block" onClick={onShops}>
-              <Icon name="store" /> دیدن فروشگاه‌ها و مقایسه
-            </button>
+            <div className="meta">{availability(d, ctx.radius_km)}</div>
           </div>
-          <div className="sectiontitle">مشخصات</div>
           <div className="card">
-            <table className="hours">
+            <table className="table">
               <tbody>
                 {d.specs.filter((s: any) => s.value).map((s: any, i: number) => (
                   <tr key={i}>
-                    <td className="muted" style={{ width: "38%" }}>{s.key}</td>
+                    <th>{s.key}</th>
                     <td>{String(s.value)}</td>
                   </tr>
                 ))}
@@ -139,45 +128,40 @@ export function CompareSheet({ pids, ctx, need, onClose, onShops, onRemove }: {
   const rows: any[] = (d?.rows ?? []).filter((r: any) => !onlyDiff || r.differs);
   return (
     <Sheet title={`مقایسهٔ ${fa(pids.length)} کالا`} onClose={onClose}>
-      <div className="insight">
-        <div className="ico"><Icon name="spark" /></div>
-        <div className="grow">
-          <h3>نظر دستیار</h3>
-          {!verdict && <div className="shimmer" style={{ height: 36, marginTop: 6 }} />}
-          {verdict && <p>{verdict.verdict || "برای این کالاها مشخصات کافی برای قضاوت نبود؛ تفاوت‌ها را در جدول ببینید."}</p>}
-        </div>
-      </div>
-      {!d && <div className="shimmer" style={{ height: 240 }} />}
+      <AiNote title="نظر دستیار" loading={!verdict}>
+        {verdict?.verdict || "برای این کالاها مشخصات کافی برای قضاوت نبود؛ تفاوت‌ها را در جدول ببینید."}
+      </AiNote>
+      {!d && <div className="shimmer" style={{ height: 240, borderRadius: 16 }} />}
       {d && !d.error && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${prods.length}, minmax(0, 1fr))`, gap: 8 }}>
+          <div className="cmpgrid" style={{ gridTemplateColumns: `repeat(${prods.length}, minmax(0, 1fr))` }}>
             {prods.map((p) => (
-              <div key={p.pid} className="card pad stack" style={{ gap: 6, padding: 10, border: verdict?.best_pid === p.pid ? "2px solid var(--brand)" : undefined }}>
+              <div key={p.pid} className={"cmpcol" + (verdict?.best_pid === p.pid ? " best" : "")}>
                 <Img src={p.image} className="pimg" />
-                {verdict?.labels?.[String(p.pid)] && <span className="pill brand">{verdict.labels[String(p.pid)]}</span>}
+                {verdict?.labels?.[String(p.pid)] ? <span className="tag brand">{verdict.labels[String(p.pid)]}</span> : <span className="tag-space" />}
                 <div className="small bold clamp2">{p.title}</div>
                 <div className="small">{priceRange(p.price_min, p.price_max)}</div>
-                <div className="tiny muted">{fa(p.n_nearby ?? 0)} فروشگاه نزدیک</div>
-                <button className="btn sm" onClick={() => onShops(p.pid)}>فروشگاه‌ها</button>
-                <button className="tiny muted" onClick={() => onRemove(p.pid)}>حذف از مقایسه</button>
+                <div className="meta">{fa(p.n_nearby ?? 0)} فروشگاه نزدیک</div>
+                <button className="btn ghost sm block" onClick={() => onShops(p.pid)}>فروشگاه‌ها</button>
+                <button className="textbtn muted" onClick={() => onRemove(p.pid)}>حذف از مقایسه</button>
               </div>
             ))}
           </div>
-          <div className="row between">
-            <div className="sectiontitle" style={{ margin: 0 }}>مشخصات</div>
-            <button className={"chip" + (onlyDiff ? " on" : "")} onClick={() => setOnlyDiff(!onlyDiff)}>فقط تفاوت‌ها</button>
+          <div className="row between" style={{ padding: "0 4px" }}>
+            <h3 className="h3">مشخصات</h3>
+            <button className={"chip sm" + (onlyDiff ? " on" : "")} onClick={() => setOnlyDiff(!onlyDiff)}>فقط تفاوت‌ها</button>
           </div>
           <div className="card" style={{ overflowX: "auto" }}>
-            <table className="compare-table">
+            <table className="table cmp">
               <tbody>
                 <tr>
-                  <th>قیمت (کمترین)</th>
+                  <th>کمترین قیمت</th>
                   {prods.map((p) => (
                     <td key={p.pid} className="bold">{toman(p.price_min)}</td>
                   ))}
                 </tr>
                 {rows.map((r, i) => (
-                  <tr key={i} className={r.differs ? "diff" : ""}>
+                  <tr key={i}>
                     <th>{r.key}</th>
                     {r.values.map((v: string | null, j: number) => (
                       <td key={j}>{v ?? <span className="muted">ثبت نشده</span>}</td>

@@ -6,9 +6,9 @@ import { RadishLogo } from "./Logo";
 
 const STEPS: [string, string, string][] = [
   ["spark", "انتخاب کالا", "اگر مدل را نمی‌دانید، با چند گزینهٔ آماده می‌پرسد و با دلیل پیشنهاد می‌دهد"],
-  ["store", "فروشگاه‌های نزدیک", "قیمت ثبت‌شده و تازگی‌اش، فاصله، باز بودن در زمان رسیدن، قسطی"],
+  ["store", "فروشگاه‌های نزدیک", "تا چند دقیقه پیاده، با ماشین یا با مترو؛ قیمت ثبت‌شده و تازگی‌اش، باز بودن در زمان رسیدن، قسطی و اصالت"],
   ["chat", "استعلام", "پیام را می‌نویسد، هم‌زمان از چند فروشگاه می‌پرسد و برای بی‌پاسخ‌ها جایگزین می‌آورد"],
-  ["route", "مراجعه", "ترتیب رفتن، ساعت رسیدن، مسیر داخل پاساژ و مسیریابی"],
+  ["route", "مراجعه", "ترتیب رفتن، ساعت رسیدن، مسیر داخل پاساژ، مسیریابی و یک دور گردش و خرید"],
 ];
 
 /** Shown beside the phone-sized app on wide screens: what this is, and a QR to open it on a phone. */
@@ -37,7 +37,7 @@ export function DesktopAside() {
             <span className="gi"><Icon name={icon} size={16} /></span>
             <div>
               <div className="bold small">{fa(i + 1)}. {title}</div>
-              <div className="tiny muted">{text}</div>
+              <div className="tiny">{text}</div>
             </div>
           </div>
         ))}

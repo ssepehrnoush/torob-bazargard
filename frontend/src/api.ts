@@ -63,4 +63,5 @@ export const api = {
   draft: (pid: number, sids: number[], ctx: Ctx) => post<any>("/api/inquiry/draft", { pid, sids, ctx }),
   visit: (pid: number | null, sids: number[], ctx: Ctx, confirmed: Record<number, unknown> | null) =>
     post<import("./types").VisitPlan>("/api/visit", { pid, sids, ctx, confirmed }),
+  stroll: (pid: number, sid: number, ctx: Ctx) => post<import("./types").Stroll>("/api/stroll", { pid, sid, ctx }),
 };

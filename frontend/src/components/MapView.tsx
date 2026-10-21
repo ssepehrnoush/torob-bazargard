@@ -18,21 +18,21 @@ function Fit({ points }: { points: [number, number][] }) {
 
 const youIcon = L.divIcon({ className: "", html: '<div class="youpin"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
 
-export function MapView({ you, pins, route, onPick, tall }: {
+export function MapView({ you, pins, route, onPick, small }: {
   you: { lat: number; lon: number };
   pins: MapPin[];
   route?: [number, number][];
   onPick?: (id: number) => void;
-  tall?: boolean;
+  small?: boolean;
 }) {
   const pts: [number, number][] = [[you.lat, you.lon], ...pins.map((p) => [p.lat, p.lon] as [number, number])];
   return (
-    <div className={"mapbox" + (tall ? " tall" : "")}>
+    <div className={"mapbox" + (small ? " small" : "")}>
       <MapContainer center={[you.lat, you.lon]} zoom={14} style={{ height: "100%", width: "100%" }} zoomControl={false} attributionControl>
         <TileLayer url={TILE_URL} attribution="&copy; OpenStreetMap" maxZoom={19} />
         <Fit points={pts} />
         <Marker position={[you.lat, you.lon]} icon={youIcon} />
-        {route && route.length > 1 && <Polyline positions={route} pathOptions={{ color: "#e2313b", weight: 4, dashArray: "6 8" }} />}
+        {route && route.length > 1 && <Polyline positions={route} pathOptions={{ color: "#e91e33", weight: 4, opacity: 0.85, dashArray: "2 9", lineCap: "round" }} />}
         {pins.map((p) => (
           <Marker
             key={p.id}
