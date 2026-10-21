@@ -25,7 +25,7 @@ log = logging.getLogger("agent")
 SESSIONS: dict[str, dict] = {}
 SESSION_TTL_S = 6 * 3600
 MAX_HISTORY = 24
-MAX_ITERATIONS = 5
+MAX_ITERATIONS = 4
 
 
 def session(sid: str | None) -> tuple[str, dict]:
@@ -151,6 +151,7 @@ TOOLS = [
             "required": ["message"]}}},
 ]
 TERMINAL = {"ask_user", "show_products", "show_shops", "start_inquiry", "reply"}
+TERMINAL_TOOLS = [t for t in TOOLS if t["function"]["name"] in TERMINAL]
 
 STEP_LABELS = {
     "search_products": "جستجو در کاتالوگ ترب",
@@ -413,6 +414,12 @@ def terminal_event(name: str, args: dict, ctx: Ctx, sess: dict) -> dict | None:
     if name == "ask_user":
         qs = []
         for q in args.get("questions", [])[:2]:
+            text = str(q.get("question", ""))
+            # never re-ask what the user already set (models sometimes do despite the prompt)
+            if ctx.budget_max and re.search(r"بودجه|قیمت|بازه|هزینه", text):
+                continue
+            if ctx.installments_only and re.search(r"قسط|اقساط|نقد", text):
+                continue
             opts = [fa_text(str(o))[:40] for o in q.get("options", [])][:6]
             if q.get("question") and len(opts) >= 2:
                 qs.append({"question": fa_text(q["question"]), "options": opts, "multi": bool(q.get("multi"))})
@@ -515,7 +522,8 @@ async def run_turn(session_id: str | None, text: str, ctx: Ctx, ui: dict) -> Asy
             choice: str | dict = "required"
             if it == 0 and unsure:  # "I don't know which model": learn what matters before recommending
                 choice = {"type": "function", "function": {"name": "ask_user"}}
-            msg = await llm.chat(msgs, tools=TOOLS, tool_choice=choice, temperature=0.3)
+            tools = TOOLS if it < MAX_ITERATIONS - 1 else TERMINAL_TOOLS  # last round: must answer the user
+            msg = await llm.chat(msgs, tools=tools, tool_choice=choice, temperature=0.3)
         except llm.LLMUnavailable as e:
             log.warning("agent fallback: %s", e)
             async for ev in fallback_turn(text, ctx, sess, "llm_error"):

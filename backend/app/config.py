@@ -31,8 +31,8 @@ _load_dotenv()
 PROVIDERS = {
     # name: (base_url, api-key env var, default model)
     # BoxAPI is an OpenAI-compatible gateway reachable from Iranian data centres (OpenAI is not).
-    "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-5.4-mini"),
-    "boxapi": ("https://ai.boxapi.ir/ai/v1", "BOXAPI_KEY", "openai/gpt-5.4-mini"),
+    "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-4.1-mini"),
+    "boxapi": ("https://ai.boxapi.ir/ai/v1", "BOXAPI_KEY", "openai/gpt-4.1-mini"),
 }
 
 

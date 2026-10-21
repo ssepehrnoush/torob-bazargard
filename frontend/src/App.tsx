@@ -206,6 +206,24 @@ export default function App() {
     setBusy(false);
   };
 
+  const reset = () => {
+    if (busy) return;
+    session.current = null;
+    firstNeed.current = null;
+    setFeed([]);
+    setCompare([]);
+    setPid(null);
+    setShopPicks([]);
+    setShopMsg(null);
+    setInq(null);
+    setVisit(null);
+    setSheet(null);
+    setProductsKey(null);
+    setCtx(DEFAULT_CTX);
+    go("discover");
+    toast("از اول شروع کنیم");
+  };
+
   const toggleCompare = (p: number) => {
     setCompare((c) => {
       if (c.includes(p)) return c.filter((x) => x !== p);
@@ -243,6 +261,11 @@ export default function App() {
           </div>
           <div className="spacer" />
           {meta && !meta.llm.available && <span className="pill amber">حالت ساده</span>}
+          {(feed.length > 0 || pid != null) && (
+            <button className="iconbtn" onClick={reset} aria-label="شروع دوباره">
+              <Icon name="refresh" size={19} />
+            </button>
+          )}
           <button className="iconbtn" onClick={() => setSheet({ kind: "about" })} aria-label="دربارهٔ داده و روش کار">
             <Icon name="info" size={20} />
           </button>
