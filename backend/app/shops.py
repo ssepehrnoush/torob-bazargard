@@ -389,7 +389,7 @@ def _bargain(items: list[dict], best_in: dict | None, ctx: Ctx, visit_at) -> dic
 def _expand(items: list[dict], ctx: Ctx) -> list[dict]:
     """How many shops a wider range would add (offered when the current range is thin)."""
     if ctx.range_mode == "time":
-        steps = sorted({m for m in (int(ctx.range_minutes * 1.5), ctx.range_minutes * 2, 60) if m > ctx.range_minutes})
+        steps = sorted({m for m in (-(-ctx.range_minutes * 3 // 10) * 5, ctx.range_minutes * 2, 60) if m > ctx.range_minutes})
         return [{"minutes": m, "count": sum(1 for i in items if i["travel"]["minutes"] <= m),
                  "label": f"تا {fa_digits(m)} دقیقه"} for m in steps[:3]]
     steps = [ctx.radius_km * 2, ctx.radius_km * 4]

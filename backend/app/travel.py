@@ -105,7 +105,7 @@ def _near(lat: float, lon: float, k: int = 6, max_km: float = 3.0):
 
 
 def _access(km: float) -> tuple[str, float]:
-    if km <= 1.2:
+    if km <= 0.9:
         return "walk", walk_minutes(km)
     return "taxi", km * 1.35 / TAXI_KMH * 60 + 4
 
@@ -144,6 +144,18 @@ def _transit(o_lat: float, o_lon: float, d_lat: float, d_lon: float) -> dict:
                 if not choice:
                     continue
                 ride, k1, k2, t1 = choice
+                if k2 == i2 or k1 == i1:
+                    # the interchange is itself the end (or start): no change of line, ride one line only
+                    ref, a, b = (r1, i1, k1) if k2 == i2 else (r2, k2, i2)
+                    seq = lines[ref]
+                    total = a_min + METRO_WAIT_MIN + _ride_minutes(ref, a, b) + e_min
+                    legs = [_leg(a_kind, a_min, to=seq[a]["name"]),
+                            _leg("metro", METRO_WAIT_MIN + _ride_minutes(ref, a, b), line=line_label(ref),
+                                 board=seq[a]["name"], alight=seq[b]["name"], stops=abs(b - a)),
+                            _leg(e_kind, e_min, to="فروشگاه")]
+                    if best is None or total < best[0]:
+                        best = (total, legs)
+                    continue
                 total = a_min + METRO_WAIT_MIN + ride + TRANSFER_MIN + e_min
                 legs = [_leg(a_kind, a_min, to=s1["name"]),
                         _leg("metro", METRO_WAIT_MIN + _ride_minutes(r1, i1, k1), line=line_label(r1), board=s1["name"],
