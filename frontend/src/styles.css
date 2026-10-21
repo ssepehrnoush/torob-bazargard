@@ -340,3 +340,15 @@ main { flex: 1; padding: 12px 12px 120px; display: flex; flex-direction: column;
 .altbox b { font-weight: 800; }
 .sendbtn.rec { background: var(--ink); animation: pulse 1.2s infinite; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(226,49,59,.45); } 70% { box-shadow: 0 0 0 12px rgba(226,49,59,0); } 100% { box-shadow: 0 0 0 0 rgba(226,49,59,0); } }
+
+/* wide screens: explain the app next to the phone-sized column */
+.aside { display: none; }
+@media (min-width: 1120px) {
+  .aside {
+    display: flex; flex-direction: column; gap: 16px; position: fixed; top: 32px; width: 300px;
+    left: calc(50% + 264px); background: var(--surface); border-radius: 20px; padding: 20px; box-shadow: var(--shadow);
+  }
+  .aside .gi { width: 30px; height: 30px; border-radius: 10px; background: var(--brand-soft); color: var(--brand-ink); display: grid; place-items: center; flex: none; }
+  .qr { width: 156px; height: 156px; align-self: center; padding: 6px; background: #fff; border: 1px solid var(--line); border-radius: 14px; }
+  .qr svg { width: 100%; height: 100%; display: block; }
+}

@@ -3,6 +3,7 @@ import { get, stream } from "./api";
 import { CompareSheet, ProductSheet } from "./components/Products";
 import { AboutSheet } from "./components/AboutSheet";
 import { ContextBar } from "./components/ContextBar";
+import { DesktopAside } from "./components/DesktopAside";
 import { AgentBlock, Feed } from "./components/Feed";
 import { InquiryView, type InquiryState } from "./components/InquiryView";
 import { ShopSheet } from "./components/ShopSheet";
@@ -252,6 +253,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <DesktopAside />
       <header className="top">
         <div className="brandrow">
           <div className="logo"><Icon name="bag" size={19} /></div>
