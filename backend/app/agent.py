@@ -579,23 +579,57 @@ async def run_turn(session_id: str | None, text: str, ctx: Ctx, ui: dict) -> Asy
     yield {"type": "done"}
 
 
+_NICE_MILLIONS = [1, 2, 3, 5, 7, 10, 15, 20, 30, 40, 50, 70, 100, 150, 200, 300, 500, 1000]
+
+
+def _budget_chip(v: int) -> str:
+    if v >= 1_000_000:
+        m = next((n for n in _NICE_MILLIONS if n * 1_000_000 >= v), _NICE_MILLIONS[-1])
+        return f"تا {fa_digits(m)} میلیون"
+    return f"تا {fa_digits(max(100, -(-v // 100_000) * 100))} هزار"
+
+
 async def fallback_turn(text: str, ctx: Ctx, sess: dict, reason: str) -> AsyncIterator[dict]:
-    """Rule-based path so the app keeps working without an LLM: plain search + data-driven reasons."""
+    """Rule-based path so the app keeps working without an LLM: the same search and ranking, reasons
+    built from the data, and refinement chips (brand, budget) that keep the previous query."""
+    q, brand = prefetch_query(text), None
+    last = sess.get("last_query")
+    m = re.match(r"^فقط\s+(.+)$", text.strip())
+    if m and last:
+        q, brand = last, m.group(1).strip()
+    elif not q and last:  # a budget / area / installment-only message refines the previous search
+        q = last
+    q = q or text
+    sess["last_query"] = q
     yield {"type": "step_start", "tool": "search_products", "label": STEP_LABELS["search_products"], "id": "fb"}
-    res = await asyncio.to_thread(catalog.search_products, text, ctx, None, None, None, None, 5, 4)
+    res = await asyncio.to_thread(catalog.search_products, q, ctx, None, brand, None, None, 5, 4)
     _remember(sess, res["items"])
     yield {"type": "step", "tool": "search_products", "label": STEP_LABELS["search_products"], "id": "fb",
-           "detail": f"«{text[:40]}»: {fa_digits(res['total_matches'])} نتیجه"}
-    items = []
-    for it in res["items"]:
-        why = []
+           "detail": f"«{q[:40]}»" + (f" فقط {brand}" if brand else "") + f": {fa_digits(res['total_matches'])} نتیجه"}
+    items = res["items"]
+    most_near = max(items, key=lambda i: i.get("n_nearby") or 0, default=None)
+    cheapest = min((i for i in items if i.get("nearby_min_price")), key=lambda i: i["nearby_min_price"], default=None)
+    out = []
+    for it in items:
+        why, tag = [], None
         if it.get("n_nearby"):
             why.append(f"{fa_digits(it['n_nearby'])} فروشگاه در شعاع شما")
         if it.get("nearby_min_price"):
-            why.append(f"از {fa_digits(f'{it['nearby_min_price']:,}')} تومان در نزدیکی")
-        items.append({**it, "why": "، ".join(why) or "مطابق جستجوی شما", "tag": None})
-    msg = "این‌ها نزدیک‌ترین نتیجه‌ها به جستجوی شما هستند." if items else "چیزی پیدا نکردم؛ عبارت دیگری امتحان کنید."
-    note = "دستیار هوشمند الان در دسترس نیست؛ نتایج با جستجوی ساده آمده‌اند."
+            why.append(f"از {fa_text(str(it['nearby_min_price']))} تومان در نزدیکی")
+        if it.get("n_installment"):
+            why.append(f"{fa_digits(it['n_installment'])} فروشگاه قسطی")
+        if most_near is it and (it.get("n_nearby") or 0) > 1:
+            tag = "بیشترین فروشگاه نزدیک"
+        elif cheapest is it:
+            tag = "ارزان‌ترین در نزدیکی"
+        out.append({**it, "why": "، ".join(why) or "مطابق جستجوی شما؛ فروشگاه نزدیکی ثبت نشده", "tag": tag})
+    sugg = [f"فقط {b}" for b, _ in res["facets"]["brands"][:3] if not brand or b != brand]
+    pts = res["facets"]["price_points"]
+    if pts and not ctx.budget_max:
+        sugg += list(dict.fromkeys(_budget_chip(p) for p in (pts[1], pts[3]) if p))
+    msg = (f"برای «{q}»{' با برند ' + brand if brand else ''} این‌ها بهترین تطابق‌ها با محل و شرایط شما هستند."
+           if out else "چیزی پیدا نکردم؛ عبارت ساده‌تری امتحان کنید (مثلاً نوع کالا و برند).")
+    note = "دستیار گفتگو الان در دسترس نیست؛ جستجو، رتبه‌بندی و مقایسهٔ فروشگاه‌ها کامل کار می‌کند."
     sess["messages"].append({"role": "assistant", "content": msg})
-    yield {"type": "products", "message": msg, "items": items, "suggestions": [], "notice": note, "fallback": reason}
+    yield {"type": "products", "message": msg, "items": out, "suggestions": sugg[:5], "notice": note, "fallback": reason}
     yield {"type": "done"}

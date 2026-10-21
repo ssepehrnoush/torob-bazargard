@@ -156,7 +156,22 @@ async def compare_verdict(body: CompareIn):
         return {"verdict": fa_text(data.get("verdict")) or None, "best_pid": data.get("best_pid"), "labels": labels}
     except Exception as e:
         log.warning("verdict failed: %s", e)
+        return rule_verdict(res["products"], near)
+
+
+def rule_verdict(products: list[dict], near: dict) -> dict:
+    """Data-only comparison summary used when no language model is available."""
+    priced = [p for p in products if p["price_min"]]
+    if len(priced) < 2:
         return {"verdict": None, "best_pid": None, "labels": {}}
+    cheap = min(priced, key=lambda p: p["price_min"])
+    most = max(products, key=lambda p: near.get(p["pid"], {}).get("n_nearby", 0))
+    labels = {str(cheap["pid"]): "ارزان‌تر"}
+    text = f"{cheap['title'][:40]} ارزان‌تر است"
+    if most["pid"] != cheap["pid"] and near.get(most["pid"], {}).get("n_nearby"):
+        labels[str(most["pid"])] = "فروشگاه نزدیک بیشتر"
+        text += f" و {most['title'][:40]} در فروشگاه‌های نزدیک بیشتری پیدا می‌شود"
+    return {"verdict": fa_text(text + ". تفاوت مشخصات را در جدول ببینید."), "best_pid": cheap["pid"], "labels": labels}
 
 
 # ---------------------------------------------------------------------------------------
