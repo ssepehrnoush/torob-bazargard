@@ -90,8 +90,10 @@ def app_status() -> dict | None:
 
 
 def pack() -> bytes:
-    if not (ROOT / "frontend" / "dist" / "index.html").is_file():
-        sys.exit("frontend/dist missing: run `npm --prefix frontend run build` first")
+    # FRONTEND_DIST: ship a build made elsewhere (e.g. from the committed tree while frontend/ has work in progress)
+    dist = Path(os.environ.get("FRONTEND_DIST") or ROOT / "frontend" / "dist")
+    if not (dist / "index.html").is_file():
+        sys.exit(f"{dist} has no index.html: run `npm --prefix frontend run build` first")
     if not DATASET_ZIP.is_file():
         sys.exit(f"dataset zip not found at {DATASET_ZIP}")
     buf = io.BytesIO()
@@ -99,7 +101,7 @@ def pack() -> bytes:
         def skip(ti: tarfile.TarInfo):
             return None if "__pycache__" in ti.name or ti.name.endswith(".pyc") else ti
         for rel in INCLUDE:
-            tar.add(ROOT / rel, arcname=rel, filter=skip)
+            tar.add(dist if rel == "frontend/dist" else ROOT / rel, arcname=rel, filter=skip)
         tar.add(DATASET_ZIP, arcname="deploy/dataset.zip")
     return buf.getvalue()
 
