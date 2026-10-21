@@ -53,7 +53,7 @@ flowchart LR
   T --> K[contact.py\nاستعلام]
   T --> V[visit.py\nبرنامهٔ مراجعه]
   C & S & K & V --> D[(SQLite فقط‌خواندنی\nساخته‌شده از دیتاست)]
-  A -- OpenAI-compatible --> L[BoxAPI / OpenAI\ngpt-4.1-mini]
+  A -- OpenAI-compatible --> L[BoxAPI\ngpt-4.1-mini]
 ```
 
 - **بک‌اند**: Python 3.12، FastAPI، SQLite با FTS5 و R-Tree (فقط خواندنی، `immutable`)، httpx برای مدل زبانی. هیچ سرویس جانبی دیگری لازم نیست.
@@ -75,7 +75,7 @@ torob/
 │   │   ├── stroll.py      # مسیر گردش و خرید در اطراف فروشگاه
 │   │   ├── geo/tehran_metro.json  # ایستگاه‌های مترو تهران به ترتیب خط (OpenStreetMap)
 │   │   ├── timegeo.py     # وقت تهران، ساعت کاری، فاصله، اعداد فارسی
-│   │   ├── llm.py         # کلاینت OpenAI-compatible با جایگزینی خودکار ارائه‌دهنده
+│   │   ├── llm.py         # کلاینت مدل زبانی (BoxAPI)، سقف هزینه و حافظهٔ موقت
 │   │   └── config.py      # تنظیمات از متغیرهای محیطی
 │   ├── scripts/make_app_db.py   # نسخهٔ سبک دیتابیس برای دیپلوی
 │   └── tests/test_core.py
@@ -116,7 +116,7 @@ torob/
 
 **استعلام (contact.py)**: پیام هر فروشگاه با قیمت ثبت‌شدهٔ خود آن فروشگاه نوشته و قبل از ارسال به کاربر نشان داده می‌شود (متن تماس تلفنی هم آماده است). پاسخ فروشگاه از یک سناریوی تصادفیِ ثابت برای هر روز ساخته می‌شود که احتمال‌هایش به دادهٔ واقعی وابسته است: هرچه قیمت قدیمی‌تر، احتمال تغییر قیمت بیشتر؛ فروشگاهی که طبق ساعت ثبت‌شده الان بسته است جواب نمی‌دهد. پاسخ‌ها با فاصلهٔ زمانی واقعی و برچسب «پاسخ شبیه‌سازی‌شده» می‌رسند. با `?demo=1` در آدرس می‌شود سناریوی هر فروشگاه را برای ضبط ویدیو انتخاب کرد.
 
-**مدل زبانی**: هر سرویس سازگار با OpenAI. پیش‌فرض `gpt-4.1-mini` (در آزمون چندنوبتی پایدارتر از `gpt-5.4-mini` بود؛ با متغیر محیطی عوض می‌شود). روی لیارا از **BoxAPI** استفاده می‌شود (OpenAI از دیتاسنترهای ایران در دسترس نیست). اگر ارائه‌دهندهٔ اول خطا بدهد، دومی امتحان می‌شود و اگر هیچ‌کدام نبود، اپ به جستجوی قاعده‌محور برمی‌گردد.
+**مدل زبانی**: همهٔ فراخوانی‌های هوش مصنوعی اپ از **BoxAPI** (درگاه اسپانسر هکاتون، سازگار با OpenAI و در دسترس از دیتاسنترهای ایران) با مدل `gpt-4.1-mini` انجام می‌شود؛ هم روی لیارا و هم در اجرای محلی (پیش‌فرض `LLM_PROVIDER=boxapi`). `gpt-4.1-mini` در آزمون چندنوبتی از `gpt-5.4-mini` پایدارتر بود. OpenAI مستقیم فقط اختیاری است و باید صریحاً با `LLM_PROVIDER=openai` روشن شود. اگر مدل در دسترس نباشد یا سقف هزینه پر شود، اپ با جستجوی قاعده‌محور ادامه می‌دهد.
 
 ---
 
@@ -149,7 +149,7 @@ python -I data/build_db.py --dataset ../_downloads/torob/dataset --db data/torob
 # ۲) بک‌اند
 cd backend
 python -m venv .venv && .venv/Scripts/pip install -r requirements.txt   # در لینوکس/مک: .venv/bin/pip
-cp ../.env.example ../.env   # کلید OPENAI_API_KEY یا BOXAPI_KEY
+cp ../.env.example ../.env   # کلید BOXAPI_KEY
 .venv/Scripts/python -m uvicorn app.main:app --port 8077
 
 # ۳) فرانت (در ترمینال دیگر)
@@ -162,9 +162,9 @@ cd frontend && npm install && npm run dev     # http://localhost:5173
 
 | متغیر | پیش‌فرض | توضیح |
 |---|---|---|
-| `LLM_PROVIDER` | `openai` | `openai` یا `boxapi` |
-| `LLM_FALLBACK_PROVIDER` | `boxapi` | ارائه‌دهندهٔ دوم؛ `none` برای غیرفعال |
-| `OPENAI_API_KEY` / `BOXAPI_KEY` | | کلیدها |
+| `LLM_PROVIDER` | `boxapi` | `boxapi` (پیش‌فرض) یا `openai` (اختیاری) |
+| `LLM_FALLBACK_PROVIDER` | `none` | ارائه‌دهندهٔ دوم، اگر لازم شد |
+| `BOXAPI_KEY` / `OPENAI_API_KEY` | | کلیدها (کلید OpenAI فقط برای حالت اختیاری) |
 | `OPENAI_MODEL` / `BOXAPI_MODEL` | `gpt-4.1-mini` / `openai/gpt-4.1-mini` | مدل |
 | `DB_PATH` | `data/torob.db` | مسیر دیتابیس |
 | `FIXED_NOW` | | ثابت کردن ساعت برای دمو، مثل `2026-10-22T11:30` |

@@ -64,7 +64,8 @@ def llm_endpoints() -> list[LLMEndpoint]:
     LLM_DISABLED=1 is the kill switch: no model is ever called and the app runs rule-based."""
     if os.environ.get("LLM_DISABLED", "").strip().lower() in ("1", "true", "yes"):
         return []
-    order = [os.environ.get("LLM_PROVIDER", "openai"), os.environ.get("LLM_FALLBACK_PROVIDER", "boxapi")]
+    # every model call goes through the sponsor gateway BoxAPI; OpenAI only when set explicitly
+    order = [os.environ.get("LLM_PROVIDER", "boxapi"), os.environ.get("LLM_FALLBACK_PROVIDER", "none")]
     out: list[LLMEndpoint] = []
     for name in order:
         ep = _endpoint(name)
