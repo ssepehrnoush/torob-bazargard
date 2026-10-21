@@ -88,7 +88,7 @@ def stroll(pid: int, anchor_sid: int, ctx: Ctx) -> dict:
             "item": {"pid": nxt["pid"], "title": nxt["title"], "category": nxt["category_name"], "image": nxt["image_url"],
                      "price": nxt["price_toman"], "usual_price": nxt["median_price_toman"], "below_pct": nxt["below_pct"],
                      "label": f"{fa_digits(nxt['below_pct'])}٪ زیر قیمت معمول در ترب"},
-            "nav": nav_links(s.lat, s.lon, s.name),
+            "nav": nav_links(s.lat, s.lon, s.name, (cur.lat, cur.lon), "walk"),
         })
         cur = s
     total += walk_minutes(haversine_km(cur.lat, cur.lon, anchor.lat, anchor.lon))

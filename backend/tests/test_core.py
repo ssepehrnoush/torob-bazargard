@@ -109,3 +109,12 @@ def test_stroll_finds_nearby_deals():
     anchor = sh.rank_shops_for_product(pid, Ctx())["items"][0]["sid"]
     r = stroll.stroll(pid, anchor, Ctx())
     assert r["stops"] and all(s["item"]["below_pct"] >= 12 for s in r["stops"])
+
+
+def test_nav_links_open_the_route_from_the_user():
+    from app.shops import nav_links
+    links = nav_links(35.8046, 51.4339, "x", (35.6998, 51.4197), "transit")
+    assert links["neshan"] == "https://neshan.org/maps/routing/public_transportation/origin/35.6998,51.4197/destination/35.8046,51.4339"
+    assert "origin=51.4197,35.6998&destination=51.4339,35.8046" in links["balad"]  # Balad wants lon,lat
+    assert "maps/dir/?api=1&origin=35.6998,51.4197" in links["google"] and links["google"].endswith("travelmode=transit")
+    assert "search" in nav_links(35.8, 51.4, "x")["google"]  # no origin: just the place

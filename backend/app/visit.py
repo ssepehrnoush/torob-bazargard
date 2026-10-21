@@ -52,7 +52,7 @@ def plan_visit(pid: int | None, sids: list[int], ctx: Ctx, confirmed: dict[int, 
             "leg": {"km": round(km, 2), **tr}, "arrive": t.isoformat(), "arrive_label": fa_digits(t.strftime("%H:%M")),
             "open": st, "price": o.get("price_toman") if o.get("price_ok") else None,
             "confirmed_price": conf.get("confirmed_price"), "hold_until": conf.get("hold_until"),
-            "guide": guide["steps"][:3] if guide else [], "nav": shops.nav_links(nxt.lat, nxt.lon, nxt.name),
+            "guide": guide["steps"][:3] if guide else [], "nav": shops.nav_links(nxt.lat, nxt.lon, nxt.name, (lat, lon), tr["mode"]),
             "installments": nxt.installments,
         })
         total_km += km

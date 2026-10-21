@@ -501,15 +501,32 @@ def shop_detail(sid: int, ctx: Ctx, pid: int | None = None) -> dict | None:
         "categories": cats, "n_products": s.n_products, "providers": s.providers,
         "mall_guide": mall_guide(s), "offer": offer, "same_mall_offers": mall_alts,
         "phone_note": "شماره‌های تلفن در داده هکاتون ساختگی هستند",
-        "nav": nav_links(s.lat, s.lon, s.name),
+        "nav": nav_links(s.lat, s.lon, s.name, (ctx.lat, ctx.lon), ctx.travel_mode),
     }
 
 
-def nav_links(lat: float, lon: float, name: str) -> dict:
+_NESHAN_MODE = {"walk": "pedestrian", "car": "car", "transit": "public_transportation"}
+_GOOGLE_MODE = {"walk": "walking", "car": "driving", "transit": "transit"}
+
+
+def nav_links(lat: float, lon: float, name: str, origin: tuple[float, float] | None = None, mode: str = "car") -> dict:
+    """Links that open the route from the user's point (or the previous stop) straight away, so nobody has
+    to tap «directions» again in the map app. Without an origin they just show the place."""
+    if origin is None:
+        return {
+            "neshan": f"https://neshan.org/maps/@{lat},{lon},17z,0p",
+            "balad": f"https://balad.ir/location?latitude={lat}&longitude={lon}&zoom=17",
+            "google": f"https://www.google.com/maps/search/?api=1&query={lat},{lon}",
+        }
+    o_lat, o_lon = round(origin[0], 6), round(origin[1], 6)
+    lat, lon = round(lat, 6), round(lon, 6)
     return {
-        "neshan": f"https://neshan.org/maps/@{lat},{lon},17z,0p",
-        "balad": f"https://balad.ir/location?latitude={lat}&longitude={lon}&zoom=17",
-        "google": f"https://www.google.com/maps/search/?api=1&query={lat},{lon}",
+        "neshan": f"https://neshan.org/maps/routing/{_NESHAN_MODE.get(mode, 'car')}"
+                  f"/origin/{o_lat},{o_lon}/destination/{lat},{lon}",
+        # Balad keeps no travel mode in the link; it opens on driving with the other modes one tap away
+        "balad": f"https://balad.ir/directions/driving?origin={o_lon},{o_lat}&destination={lon},{lat}",
+        "google": f"https://www.google.com/maps/dir/?api=1&origin={o_lat},{o_lon}&destination={lat},{lon}"
+                  f"&travelmode={_GOOGLE_MODE.get(mode, 'driving')}",
     }
 
 
