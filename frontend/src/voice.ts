@@ -1,7 +1,7 @@
 /* Voice in and out that works beyond Chrome: record with MediaRecorder and let the server transcribe (/api/stt),
    and read answers with the server's voice (/api/tts), falling back to the browser's own Persian voice. */
 
-export type VoiceError = { message: string };
+export type VoiceError = { message: string; blocked?: boolean };
 
 const MIME = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus", "audio/ogg"];
 
@@ -169,9 +169,19 @@ export async function speak(id: string, text: string, onEnd: () => void): Promis
     player.src = mine.url;
     player.onended = finish;
     player.onerror = finish;
-    await player.play();
+    try {
+      await player.play();
+    } catch (e: any) {
+      // The phone blocked sound that did not start from a tap: the audio is fine, the person just has to ask for it.
+      if (e?.name === "NotAllowedError") {
+        current = null;
+        throw { message: "برای شنیدن جواب، «بشنو» را بزنید", blocked: true };
+      }
+      throw e;
+    }
     return;
-  } catch {
+  } catch (e: any) {
+    if (e?.blocked) throw e;
     if (current !== mine) return;
   }
   const v = browserVoice();

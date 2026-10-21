@@ -87,19 +87,19 @@ export function AgentBlock({ it, ...h }: FeedHandlers & { it: AgentItem }) {
   const spoke = useRef(false);
   const open = it.pending || showSteps; // live steps while working, one quiet line afterwards
   const canSpeak = h.tts && !it.pending && !!it.message;
-  const play = () => {
+  const play = (auto = false) => {
     if (playing) return stopSpeaking();
     setPlaying(true);
     speak(it.id, it.message!, () => setPlaying(false)).catch((e) => {
       setPlaying(false);
-      h.onToast(e?.message ?? "پخش صوتی جواب الان در دسترس نیست");
+      if (!(auto && e?.blocked)) h.onToast(e?.message ?? "پخش صوتی جواب الان در دسترس نیست"); // a blocked autoplay just waits for «بشنو»
     });
   };
   // A question asked by voice gets its answer read aloud once, as soon as it lands.
   useEffect(() => {
     if (it.speak && canSpeak && !spoke.current) {
       spoke.current = true;
-      play();
+      play(true);
     }
   }, [it.speak, canSpeak]); // eslint-disable-line
   return (
@@ -108,7 +108,7 @@ export function AgentBlock({ it, ...h }: FeedHandlers & { it: AgentItem }) {
         <span className="avatar"><RadishLogo size={15} /></span>
         <span>دستیار ترب</span>
         {canSpeak && (
-          <button className={"speakbtn" + (playing ? " on" : "")} onClick={play} aria-label={playing ? "توقف پخش" : "شنیدن جواب"} aria-pressed={playing}>
+          <button className={"speakbtn" + (playing ? " on" : "")} onClick={() => play()} aria-label={playing ? "توقف پخش" : "شنیدن جواب"} aria-pressed={playing}>
             <Icon name={playing ? "stop" : "volume"} size={16} />
             {playing ? "توقف" : "بشنو"}
           </button>
