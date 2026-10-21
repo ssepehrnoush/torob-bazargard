@@ -8,13 +8,13 @@ import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import agent, catalog, config, contact, db, llm, shops, stroll, visit
+from . import agent, catalog, config, contact, db, llm, shops, stroll, visit, voice
 from . import travel
 from .agent import fmt_shops, toman
 from .models import Ctx
@@ -72,7 +72,7 @@ def meta():
     m = db.meta()
     return {"places": PLACES, "visit_presets": VISIT_PRESETS, "travel_modes": travel.MODES,
             "range_minutes_presets": [10, 20, 30, 45, 60], "snapshot": m.get("snapshot_max_price_change_utc"),
-            "counts": json.loads(m.get("csv_counts", "{}")), "llm": llm.describe(),
+            "counts": json.loads(m.get("csv_counts", "{}")), "llm": llm.describe(), "voice": voice.enabled(),
             "now": now_tehran().isoformat()}
 
 
@@ -299,6 +299,50 @@ async def stroll_route(body: StrollIn):
 @app.post("/api/visit")
 async def visit_plan(body: VisitIn):
     return await asyncio.to_thread(visit.plan_visit, body.pid, body.sids, body.ctx, body.confirmed)
+
+
+# ---------------------------------------------------------------------------------------
+# Voice: the mic works in every browser (Telegram's included) and answers can be read aloud
+# ---------------------------------------------------------------------------------------
+AUDIO_TYPES = ("audio/", "video/webm", "video/mp4", "application/octet-stream")
+
+
+@app.post("/api/stt")
+async def speech_to_text(request: Request, audio: UploadFile = File(...), lang: str = Form("fa")):
+    data = await audio.read(voice.STT_MAX_BYTES + 1)
+    if len(data) > voice.STT_MAX_BYTES:
+        raise HTTPException(413, "صدای ضبط‌شده خیلی طولانی است")
+    ctype = (audio.content_type or "").split(";")[0].strip().lower()
+    if not ctype.startswith(AUDIO_TYPES):
+        raise HTTPException(415, "این قالب صدا پشتیبانی نمی‌شود")
+    ext = {"audio/webm": "webm", "video/webm": "webm", "audio/mp4": "mp4", "video/mp4": "mp4", "audio/ogg": "ogg",
+           "audio/mpeg": "mp3", "audio/wav": "wav", "audio/x-wav": "wav", "audio/aac": "m4a", "audio/x-m4a": "m4a"}.get(ctype, "webm")
+    try:
+        llm.check_session_budget(client_key(request))
+        text = await asyncio.wait_for(voice.transcribe(data, f"voice.{ext}", ctype, lang), timeout=40)
+    except (llm.LLMUnavailable, asyncio.TimeoutError) as e:
+        log.warning("stt failed: %s", e)
+        raise HTTPException(503, "تبدیل صدا به متن الان در دسترس نیست")
+    log.info("stt ok %d bytes %s -> %d chars", len(data), ctype, len(text))
+    return {"text": text}
+
+
+class TtsIn(BaseModel):
+    text: str = Field(max_length=4000)
+    voice: str | None = None
+
+
+@app.post("/api/tts")
+async def text_to_speech(body: TtsIn, request: Request):
+    try:
+        llm.check_session_budget(client_key(request))
+        audio = await asyncio.wait_for(voice.speak(body.text), timeout=45)
+    except ValueError:
+        raise HTTPException(400, "متنی برای خواندن نیست")
+    except (llm.LLMUnavailable, asyncio.TimeoutError) as e:
+        log.warning("tts failed: %s", e)
+        raise HTTPException(503, "خواندن پاسخ الان در دسترس نیست")
+    return Response(audio, media_type="audio/wav", headers={"Cache-Control": "public, max-age=86400"})
 
 
 # ---------------------------------------------------------------------------------------

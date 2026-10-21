@@ -127,3 +127,9 @@ def test_phone_query_with_feature_word_and_budget_finds_phones():
     for q in ("گوشی سامسونگ دوربین", "گوشی سامسونگ"):
         items = catalog.search_products(q, Ctx(budget_max=200_000_000, installments_only=True))["items"]
         assert items and all(i["category"] == "گوشی موبایل" for i in items)
+
+
+def test_read_aloud_text_is_clipped_at_a_sentence_end():
+    from app import voice
+    out = voice.clip_text("این یک جملهٔ کوتاه است. " * 80)
+    assert len(out) <= voice.TTS_MAX_CHARS and out.endswith(".")

@@ -126,6 +126,12 @@ async function waitFor(expr, ms = 60000, fast = true) {
   }
   setSpeed(1);
   if (!ok) log("timeout waiting for", expr);
+  // a take where the assistant fell back to plain search is not worth keeping: stop and record again later
+  if (await js("document.body.innerText.includes('دستیار گفتگو الان در دسترس نیست')")) {
+    log("FALLBACK: the assistant was unavailable during this take");
+    proc.kill();
+    process.exit(3);
+  }
   return ok;
 }
 const TAP_CSS = `.__tap{position:fixed;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:rgba(233,30,51,.28);
@@ -362,7 +368,7 @@ await tapEl(byText("فروشگاه‌ها", ".jstep"), { scroll: false });
 await waitFor("document.querySelector('.bargain') || document.querySelectorAll('.scard').length", 20000);
 await js("window.scrollTo({ top: 0, behavior: 'smooth' }); true");
 await say();
-await hold(1.5);
+await hold(Math.max(1.5, (voiceEnd - tick()) / 1000 + 0.3)); // let the offer card be seen while it is described
 await tapEl("document.querySelector('.bargain .btn')");
 await hold(1.2);
 await tapEl(`(() => { const r = [...document.querySelectorAll('.scard')].find((s) => s.querySelector('.line-dot')) || document.querySelector('.scard.flash') || document.querySelector('.scard'); return r?.querySelector('.scard-main') })()`);

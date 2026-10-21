@@ -106,11 +106,24 @@ p{{font-size:40px;color:#475569;margin-top:18px;font-weight:600}}
 def render(html_text: str, png: Path) -> None:
     src = png.with_suffix(".html")
     src.write_text(html_text, encoding="utf-8")
-    profile = WORK / "chrome-profile"  # its own profile, so it never attaches to a Chrome the user has open
-    subprocess.run([CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1",
-                    f"--user-data-dir={profile}", "--no-first-run", "--no-default-browser-check",
-                    "--window-size=1920,1080", "--virtual-time-budget=3000", f"--screenshot={png}", src.as_uri()],
-                   check=True, capture_output=True, timeout=60)
+    import shutil
+    import tempfile
+    for attempt in range(3):
+        # a fresh profile per render: a Chrome left over from a previous render must not hold the lock
+        profile = tempfile.mkdtemp(prefix="bzp-")
+        try:
+            subprocess.run([CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1",
+                            f"--user-data-dir={profile}", "--no-first-run", "--no-default-browser-check",
+                            "--window-size=1920,1080", "--virtual-time-budget=3000", f"--screenshot={png}", src.as_uri()],
+                           check=True, capture_output=True, timeout=45)
+            return
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
+            if png.exists() and png.stat().st_size > 10_000:
+                return  # Chrome sometimes crashes on exit after writing the screenshot
+            print(f"render failed ({type(e).__name__}), retrying: {png.name}", flush=True)
+        finally:
+            shutil.rmtree(profile, ignore_errors=True)
+    sys.exit(f"could not render {png.name}")
 
 
 def ffmpeg(*args: str) -> None:
@@ -137,9 +150,10 @@ def main() -> None:
             marks.append((c["start"], sc["id"], c["text"]))
             nxt = [d["start"] for d in cues if d["start"] > c["start"]]
             off = c["start"] + c["dur"] * 1000 + 1200
-            if not nxt or off < nxt[0]:
+            # the subtitle clears before the next line, and never after its own scene has ended
+            if (not nxt or off < nxt[0]) and off < sc.get("end", end):
                 marks.append((off, sc["id"], None))
-    marks = sorted(marks, key=lambda m: m[0])
+    marks = sorted(marks, key=lambda m: (m[0], m[2] is not None))
     marks = [(max(t0, m[0]), m[1], m[2]) for m in marks]
     if marks[0][0] > t0:
         marks.insert(0, (t0, scenes[0]["id"], None))
@@ -169,17 +183,24 @@ def main() -> None:
     flist.append(f"file '{(REC / 'frames' / frames[-1]['file']).as_posix()}'")
     (WORK / "frames.txt").write_text("\n".join(flist), encoding="utf-8")
 
-    # rounded-corner mask for the screen
+    # rounded screen corners: a still overlay paints the bezel colour into the four corners (a looped alpha mask
+    # made ffmpeg buffer frames until it ran out of memory)
     from PIL import Image, ImageDraw
-    mask = Image.new("L", (PH_W, PH_H), 0)
-    ImageDraw.Draw(mask).rounded_rectangle((0, 0, PH_W - 1, PH_H - 1), radius=48, fill=255)
-    mask.save(WORK / "mask.png")
+    caps = Image.new("RGBA", (1920, 1080), (0, 0, 0, 0))
+    d = ImageDraw.Draw(caps)
+    d.rectangle((PH_X, PH_Y, PH_X + PH_W - 1, PH_Y + PH_H - 1), fill=(15, 23, 42, 255))
+    d.rounded_rectangle((PH_X, PH_Y, PH_X + PH_W - 1, PH_Y + PH_H - 1), radius=48, fill=(0, 0, 0, 0))
+    caps.save(WORK / "caps.png")
 
     enc = ["-r", str(FPS), "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p"]
-    ffmpeg("-f", "concat", "-safe", "0", "-i", "panels.txt", "-f", "concat", "-safe", "0", "-i", "frames.txt",
-           "-loop", "1", "-i", "mask.png", "-filter_complex",
-           f"[0:v]fps={FPS},format=yuv420p[bg];[1:v]fps={FPS},scale={PH_W}:{PH_H}:flags=lanczos,format=rgba[ph];"
-           f"[2:v]format=gray,scale={PH_W}:{PH_H}[m];[ph][m]alphamerge[phm];[bg][phm]overlay={PH_X}:{PH_Y}:shortest=1[v]",
+    # three plain steps (one big graph ran out of memory): background, phone screen, then the overlay. The
+    # corner image is a single frame that overlay repeats, not a looped input.
+    fast = ["-r", str(FPS), "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-pix_fmt", "yuv420p"]
+    ffmpeg("-f", "concat", "-safe", "0", "-i", "panels.txt", "-vf", f"fps={FPS},format=yuv420p", "-t", f"{total:.3f}", *fast, "bg.mp4")
+    ffmpeg("-f", "concat", "-safe", "0", "-i", "frames.txt", "-vf", f"fps={FPS},scale={PH_W}:{PH_H}:flags=lanczos,format=yuv420p",
+           "-t", f"{total:.3f}", *fast, "phone.mp4")
+    ffmpeg("-i", "bg.mp4", "-i", "phone.mp4", "-i", "caps.png", "-filter_complex",
+           f"[0:v][1:v]overlay={PH_X}:{PH_Y}[v1];[v1][2:v]overlay=0:0,format=yuv420p[v]",
            "-map", "[v]", "-t", f"{total:.3f}", *enc, "main.mp4")
     print("main video done")
 
