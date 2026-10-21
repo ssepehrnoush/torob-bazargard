@@ -4,14 +4,14 @@ import { fa, short, toman } from "../fmt";
 import { Icon } from "../icons";
 import type { Ctx, InquiryShop, InquirySummary, ProductCard as PC, Reply } from "../types";
 import { Img, availability, } from "./Products";
-import { ShopCard, freshTone } from "./ShopsView";
+import { ShopCard } from "./ShopsView";
 
 const OUTCOME: Record<Reply["outcome"], { label: string; tone: string; icon: string }> = {
-  confirmed: { label: "موجود، قیمت تأیید شد", tone: "green", icon: "check" },
-  price_changed: { label: "موجود، قیمت تغییر کرده", tone: "amber", icon: "refresh" },
+  confirmed: { label: "موجود، تأیید شد", tone: "green", icon: "check" },
+  price_changed: { label: "قیمت تغییر کرده", tone: "amber", icon: "refresh" },
   out_of_stock: { label: "ناموجود", tone: "red", icon: "x" },
   no_answer: { label: "بی‌پاسخ", tone: "gray", icon: "hourglass" },
-  closed: { label: "بسته بود، جواب نداد", tone: "gray", icon: "clock" },
+  closed: { label: "بسته بود", tone: "gray", icon: "clock" },
 };
 const SCENARIOS: [string, string][] = [["", "خودکار"], ["confirmed", "موجود"], ["price_changed", "تغییر قیمت"], ["out_of_stock", "ناموجود"], ["no_answer", "بی‌پاسخ"]];
 
@@ -42,6 +42,7 @@ export function InquiryView({ st, setSt, ctx, demo, onOpenShop, onVisit, onResta
   const [running, setRunning] = useState(false);
   const [preview, setPreview] = useState<{ shops: InquiryShop[]; callScript: string[]; notice: string } | null>(null);
   const [showScript, setShowScript] = useState(false);
+  const [showDraft, setShowDraft] = useState(false);
   const ran = useRef<string>("");
   const key = `${st.pid}:${st.sids.join(",")}`;
 
@@ -81,34 +82,24 @@ export function InquiryView({ st, setSt, ctx, demo, onOpenShop, onVisit, onResta
 
   return (
     <>
-      {st.product && (
-        <div className="card phead">
-          <Img src={st.product.image} />
-          <div className="grow">
-            <div className="tiny muted">استعلام برای</div>
-            <div className="small bold clamp2">{st.product.title}</div>
-          </div>
-        </div>
-      )}
-
-      <div className="notice" style={{ color: "var(--violet)", background: "var(--violet-soft)" }}>
-        <Icon name="info" size={14} style={{ marginTop: 3 }} />
-        <span>{(st.started ? st.notice : preview?.notice) || "پاسخ فروشگاه‌ها شبیه‌سازی می‌شود."}</span>
-      </div>
-
-      {!st.started && <img className="art-banner" src="/img/inquiry.webp" alt="" style={{ aspectRatio: "2 / 1" }} />}
+      {!st.started && <img className="art-banner" src="/img/inquiry.webp" alt="" style={{ aspectRatio: "12 / 5" }} />}
 
       {!st.started && (
         <div className="card pad stack">
-          <div className="bold">دستیار این پیام را برای {fa(st.sids.length)} فروشگاه می‌فرستد</div>
-          {!preview && <div className="shimmer" style={{ height: 120 }} />}
-          {preview?.shops[0] && <div className="bubble-out">{preview.shops[0].draft}</div>}
-          <div className="tiny muted">پیام هر فروشگاه با قیمت ثبت‌شدهٔ خود آن فروشگاه شخصی‌سازی می‌شود. اگر ترجیح می‌دهید خودتان زنگ بزنید، متن تماس هم آماده است.</div>
-          <div className="row wrap">
-            <button className="btn grow" onClick={start} disabled={!preview || running}>
-              <Icon name="send" size={16} style={{ transform: "scaleX(-1)" }} /> ارسال و استعلام هم‌زمان
+          <div className="bold">از {fa(st.sids.length)} فروشگاه قیمت و موجودی بپرسم؟</div>
+          {st.product && <div className="tiny muted ellipsis">{st.product.title}</div>}
+          {!preview && <div className="shimmer" style={{ height: 80 }} />}
+          {preview?.shops[0] && (
+            <button className={"bubble-out" + (showDraft ? "" : " clamp3")} style={{ textAlign: "right" }} onClick={() => setShowDraft(!showDraft)}>
+              {preview.shops[0].draft}
             </button>
-            <button className="btn secondary" onClick={() => setShowScript(!showScript)}><Icon name="phone" size={16} /> متن تماس</button>
+          )}
+          <button className="btn block" onClick={start} disabled={!preview || running}>
+            <Icon name="send" size={16} style={{ transform: "scaleX(-1)" }} /> بپرس
+          </button>
+          <div className="row between">
+            <span className="tiny muted"><Icon name="info" size={12} /> پاسخ فروشگاه‌ها شبیه‌سازی می‌شود</span>
+            <button className="linkbtn" onClick={() => setShowScript(!showScript)}><Icon name="phone" size={14} /> متن تماس تلفنی</button>
           </div>
           {showScript && preview && (
             <ol className="small" style={{ margin: 0, paddingRight: 18 }}>
@@ -118,67 +109,46 @@ export function InquiryView({ st, setSt, ctx, demo, onOpenShop, onVisit, onResta
         </div>
       )}
 
-      {shops.map((s) => {
-        const r = st.replies[s.sid];
-        const waiting = st.started && !r;
-        const o = r ? OUTCOME[r.outcome] : null;
-        return (
-          <div key={s.sid} className="iq fadein">
-            <div className="row">
-              <button className="grow" style={{ textAlign: "right" }} onClick={() => onOpenShop(s.sid)}>
-                <div className="bold">{s.name}</div>
-                <div className="tiny muted">{s.distance_label}، {s.open_now.label}</div>
-              </button>
-              <div style={{ textAlign: "left" }}>
-                <div className="tiny muted">ثبت‌شده</div>
-                <div className="small bold">{s.price ? short(s.price) : "؟"}</div>
+      <div className="card iqlist">
+        {shops.map((s) => {
+          const r = st.replies[s.sid];
+          const waiting = st.started && !r;
+          const o = r ? OUTCOME[r.outcome] : null;
+          return (
+            <div key={s.sid} className="iqrow fadein">
+              <div className="row">
+                <button className="grow" style={{ textAlign: "right", minWidth: 0 }} onClick={() => onOpenShop(s.sid)}>
+                  <div className="bold ellipsis">{s.name}</div>
+                  <div className="tiny muted">ثبت‌شده: {s.price ? toman(s.price) : "بدون قیمت"}</div>
+                </button>
+                {waiting && <span className="typing small-typing"><i /><i /><i /></span>}
+                {o && <span className={"tag " + (o.tone === "green" ? "green" : o.tone === "amber" ? "amber" : o.tone === "red" ? "red" : "gray")}>{o.label}</span>}
               </div>
-            </div>
-            <div className="row wrap" style={{ gap: 4 }}>
-              <span className={"pill " + freshTone(s.freshness)}>{s.freshness.label.replace("قیمت ثبت‌شده ", "")}</span>
-              <span className="pill">موبایل: {fa(s.phone ?? "")}</span>
-            </div>
-            {demo && !st.started && (
-              <div className="scenario">
-                <span className="tiny muted">سناریو:</span>
-                {SCENARIOS.map(([k, l]) => (
-                  <button key={k} className={(forced[s.sid] ?? "") === k ? "on" : ""} onClick={() => setForced({ ...forced, [s.sid]: k })}>{l}</button>
-                ))}
-              </div>
-            )}
-            {st.started && <div className="bubble-out">{s.draft.split("\n")[0]} …</div>}
-            {waiting && (
-              <div className="typing" style={{ alignSelf: "flex-end" }}><i /><i /><i /> <span style={{ marginRight: 6 }}>در انتظار پاسخ فروشگاه</span></div>
-            )}
-            {r && (
-              <>
-                {r.text ? (
-                  <div className="stack" style={{ gap: 2, alignItems: "flex-end" }}>
-                    <span className="simlabel"><Icon name="info" size={11} /> پاسخ شبیه‌سازی‌شده</span>
-                    <div className="bubble-in">{r.text}</div>
-                  </div>
-                ) : (
-                  <div className="small muted">{r.note}</div>
-                )}
-                <div className={"outcome"} style={{ color: `var(--${o!.tone === "gray" ? "muted" : o!.tone})` }}>
-                  <Icon name={o!.icon} size={16} /> {o!.label}
+              {demo && !st.started && (
+                <div className="scenario">
+                  {SCENARIOS.map(([k, l]) => (
+                    <button key={k} className={(forced[s.sid] ?? "") === k ? "on" : ""} onClick={() => setForced({ ...forced, [s.sid]: k })}>{l}</button>
+                  ))}
                 </div>
-                {r.in_stock && (
-                  <div className="confirmed-box">
-                    <div><span className="muted">قیمت تأییدشده</span><b>{toman(r.confirmed_price)}</b>
-                      {!!r.price_delta && <span className="tiny" style={{ color: r.price_delta > 0 ? "var(--red)" : "var(--green)" }}>{r.price_delta > 0 ? "+" : "−"}{short(Math.abs(r.price_delta))} نسبت به قیمت ثبت‌شده</span>}
-                    </div>
-                    <div><span className="muted">نگه‌داشتن کالا</span><b>{r.hold_until ?? "نامشخص"}</b></div>
-                    <div><span className="muted">ساعت کاری امروز</span><b>تا {r.hours_today}</b></div>
-                    <div><span className="muted">قسطی</span><b>{r.installments ?? "ندارد"}</b></div>
-                  </div>
-                )}
-                {r.outcome === "out_of_stock" && r.restock && <div className="small">فروشنده گفت {r.restock} می‌تواند تهیه کند.</div>}
-              </>
-            )}
-          </div>
-        );
-      })}
+              )}
+              {r && (r.text ? (
+                <div className="bubble-in">{r.text}</div>
+              ) : (
+                <div className="tiny muted">{r.note}</div>
+              ))}
+              {r?.in_stock && (
+                <div className="confirmed-line">
+                  <Icon name="check" size={14} /> تأییدشده: <b>{toman(r.confirmed_price)}</b>
+                  {!!r.price_delta && <span style={{ color: r.price_delta > 0 ? "var(--red)" : "var(--green)" }}> ({r.price_delta > 0 ? "+" : "−"}{short(Math.abs(r.price_delta))})</span>}
+                  {r.hold_until && <span className="muted">، نگه می‌دارند {r.hold_until}</span>}
+                </div>
+              )}
+              {r?.outcome === "out_of_stock" && r.restock && <div className="tiny muted">فروشنده گفت {r.restock} می‌تواند تهیه کند.</div>}
+            </div>
+          );
+        })}
+        {st.started && <div className="tiny muted simnote"><Icon name="info" size={12} /> پاسخ‌ها شبیه‌سازی‌شده‌اند؛ شماره‌های داده ساختگی‌اند.</div>}
+      </div>
 
       {st.started && !sum && Object.keys(st.replies).length === shops.length && shops.length > 0 && (
         <div className="typing"><i /><i /><i /> <span style={{ marginRight: 6 }}>در حال جمع‌بندی</span></div>
@@ -195,7 +165,7 @@ export function InquiryView({ st, setSt, ctx, demo, onOpenShop, onVisit, onResta
           </div>
           {sum.alternatives.length > 0 && (
             <>
-              <div className="sectiontitle">جایگزین‌های آماده <span className="muted">برای فروشگاه‌های ناموفق</span></div>
+              <div className="sectiontitle">جایگزین‌های آماده</div>
               {sum.alternatives.map((a, idx) => (
                 <ShopCard key={a.sid} i={a} rank={idx === 0 ? 0 : -1} pick={false} selected={false} onToggle={() => onRestart([a.sid])} onOpen={() => onOpenShop(a.sid)} />
               ))}

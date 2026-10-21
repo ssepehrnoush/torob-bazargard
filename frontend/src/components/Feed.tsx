@@ -6,11 +6,10 @@ import { RadishLogo } from "./Logo";
 import { ProductCard } from "./Products";
 
 const EXAMPLES = [
-  "یه کتونی برای پیاده‌روی روزانه می‌خوام، مدلش رو نمی‌دونم",
-  "گوشی سامسونگ تا ۲۵۰ میلیون، قسطی",
-  "هدفون بلوتوث برای باشگاه",
-  "شارژر اصلی ۲۰ وات آیفون",
-  "اسپیکر بلوتوث جی‌بی‌ال",
+  "کتونی برای پیاده‌روی، مدلش رو نمی‌دونم",
+  "گوشی سامسونگ تا ۲۰۰ میلیون، قسطی",
+  "شارژر ۲۰ وات اصلی آیفون",
+  "اسپیکر جی‌بی‌ال Flip 7",
 ];
 
 type AgentItem = Extract<FeedItem, { kind: "agent" }>;
@@ -35,7 +34,7 @@ export function Feed({ items, meta, stale, onRefresh, ...h }: Handlers & { items
         <img className="art" src="/img/hero.webp" alt="" style={{ height: 190, objectPosition: "50% 45%" }} />
         <div className="copy">
         <h1>چی می‌خوای بخری؟</h1>
-        <p>بگو دنبال چی هستی، حتی اگه مدلش رو نمی‌دونی. کمکت می‌کنم انتخاب کنی، نزدیک‌ترین و به‌صرفه‌ترین فروشگاه رو پیدا کنی و قبل از رفتن قیمت و موجودی رو چک کنی.</p>
+        <p>حتی اگه مدلش رو نمی‌دونی. فروشگاه نزدیک و به‌صرفه رو پیدا می‌کنم و قبل از رفتن قیمت و موجودی رو می‌پرسم.</p>
         <div className="examples">
           {EXAMPLES.map((e) => (
             <button key={e} className="example" disabled={h.busy} onClick={() => h.onSend(e)}>
@@ -44,11 +43,8 @@ export function Feed({ items, meta, stale, onRefresh, ...h }: Handlers & { items
           ))}
         </div>
         <div className="datanote">
-          <Icon name="info" size={15} style={{ marginTop: 3, flex: "none" }} />
-          <span>
-            از بین {fa((meta?.counts?.shops ?? 6476).toLocaleString("en-US")).replace(/,/g, "٫")} فروشگاه حضوری تهران و{" "}
-            {fa((meta?.counts?.products ?? 225903).toLocaleString("en-US")).replace(/,/g, "٫")} کالا. قیمت‌ها «ثبت‌شده» هستند و تا استعلام نگیریم قطعی نیستند.
-          </span>
+          <Icon name="info" size={14} style={{ marginTop: 3, flex: "none" }} />
+          <span>{fa((meta?.counts?.shops ?? 6476).toLocaleString("en-US")).replace(/,/g, "٫")} فروشگاه حضوری تهران؛ قیمت‌ها تا استعلام قطعی نیستند.</span>
         </div>
         </div>
       </div>
@@ -71,14 +67,21 @@ export function Feed({ items, meta, stale, onRefresh, ...h }: Handlers & { items
 }
 
 export function AgentBlock({ it, ...h }: Handlers & { it: AgentItem }) {
+  const [showSteps, setShowSteps] = useState(false);
+  const open = it.pending || showSteps; // live steps while working, one quiet line afterwards
   return (
     <div className="agent fadein">
       <div className="agenthead">
         <span className="avatar"><RadishLogo size={17} /></span>
         <span>دستیار خرید حضوری</span>
-        {it.elapsed != null && <span className="tiny">({fa(it.elapsed.toFixed(1)).replace(".", "٫")} ثانیه)</span>}
+        {!it.pending && it.steps.length > 0 && (
+          <button className="stepstoggle" onClick={() => setShowSteps(!showSteps)}>
+            <Icon name="check" size={13} /> {fa(it.steps.length)} کار انجام شد
+            <Icon name="down" size={13} style={{ transform: showSteps ? "rotate(180deg)" : undefined }} />
+          </button>
+        )}
       </div>
-      {it.steps.length > 0 && (
+      {open && it.steps.length > 0 && (
         <div className="steps">
           {it.steps.map((s) => (
             <div className="stepline" key={s.id}>

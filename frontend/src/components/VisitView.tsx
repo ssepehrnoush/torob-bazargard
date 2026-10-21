@@ -74,24 +74,17 @@ export function VisitView({ pid, sids, confirmed, ctx, onOpenShop, toast }: {
               <div className="tiny muted">{s.leg.label}، رسیدن حدود {s.arrive_label}</div>
               <button className="bold" style={{ textAlign: "right" }} onClick={() => onOpenShop(s.sid)}>{s.name}</button>
               {s.mall && <div className="small muted">{s.mall}</div>}
-              <div className="row wrap" style={{ gap: 4 }}>
-                <span className={"pill " + openTone(s.open)}><span className={"dot " + openTone(s.open)} /> {s.open.label}</span>
-                {s.confirmed_price ? (
-                  <span className="pill green"><Icon name="check" size={12} /> تأییدشده: {toman(s.confirmed_price)}</span>
-                ) : s.price ? (
-                  <span className="pill amber">ثبت‌شده: {toman(s.price)} (تأیید نشده)</span>
-                ) : null}
-                {s.hold_until && <span className="pill blue">نگه می‌دارند: {s.hold_until}</span>}
+              <div className="metarow" style={{ marginTop: 0 }}>
+                <span><i className={"dot " + openTone(s.open)} /> {s.open.state === "open" ? s.open.label.replace("باز است ", "باز ") : s.open.label}</span>
+                {s.confirmed_price ? <span style={{ color: "var(--green)", fontWeight: 700 }}>تأییدشده {toman(s.confirmed_price)}</span>
+                  : s.price ? <span className="muted">ثبت‌شده {toman(s.price)}</span> : null}
               </div>
-              {s.guide.length > 0 && (
-                <div className="small" style={{ background: "var(--blue-soft)", borderRadius: 10, padding: "6px 10px" }}>
-                  {s.guide.map((g, j) => <div key={j}>{g.text}</div>)}
-                </div>
-              )}
+              {s.hold_until && <div className="tiny" style={{ color: "var(--blue)" }}>تا {s.hold_until} دیگر برایتان نگه می‌دارند</div>}
+              {s.guide.length > 0 && <div className="tiny muted">{s.guide.slice(1, 3).map((g) => g.text.split(" (")[0]).join("، ")}</div>}
               <div className="navbtns">
-                <a className="btn sm soft" href={s.nav.neshan} target="_blank" rel="noreferrer"><Icon name="nav" size={14} /> نشان</a>
-                <a className="btn sm soft" href={s.nav.balad} target="_blank" rel="noreferrer"><Icon name="nav" size={14} /> بلد</a>
-                <a className="btn sm soft" href={s.nav.google} target="_blank" rel="noreferrer"><Icon name="nav" size={14} /> گوگل‌مپ</a>
+                <a className="linkbtn" href={s.nav.neshan} target="_blank" rel="noreferrer"><Icon name="nav" size={14} /> نشان</a>
+                <a className="linkbtn" href={s.nav.balad} target="_blank" rel="noreferrer"><Icon name="nav" size={14} /> بلد</a>
+                <a className="linkbtn" href={s.nav.google} target="_blank" rel="noreferrer"><Icon name="nav" size={14} /> گوگل‌مپ</a>
               </div>
             </div>
           </div>
@@ -100,7 +93,7 @@ export function VisitView({ pid, sids, confirmed, ctx, onOpenShop, toast }: {
 
       <div className="card pad stack">
         <div className="bold">قبل از رفتن</div>
-        {plan.checklist.map((c) => (
+        {plan.checklist.slice(0, 3).map((c) => (
           <div key={c} className="row small" style={{ alignItems: "flex-start" }}><Icon name="check" size={15} style={{ color: "var(--green)", marginTop: 4 }} /> <span>{c}</span></div>
         ))}
       </div>

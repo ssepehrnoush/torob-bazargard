@@ -23,7 +23,7 @@ def fa_digits(s: object) -> str:
     return str(s).translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
 
 
-_NUM = re.compile(r"(?<![\w.])\d[\d,]*(?:\.\d+)?(?![\w.])")
+_NUM = re.compile(r"(?<![\w.])\d[\d,٬]*(?:\.\d+)?(?![\w.])")
 
 
 def fa_text(text: str | None) -> str:
@@ -32,7 +32,7 @@ def fa_text(text: str | None) -> str:
         return ""
 
     def num(m: re.Match) -> str:
-        raw = m.group().replace(",", "")
+        raw = m.group().replace(",", "").replace("٬", "")
         if "." not in raw and len(raw) >= 5:
             raw = f"{int(raw):,}".replace(",", "٫")
         return fa_digits(raw.replace(".", "٫"))

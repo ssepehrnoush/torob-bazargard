@@ -17,12 +17,9 @@ export function Img({ src, className = "pimg" }: { src: string | null; className
   return <img className={className} src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBad(true)} />;
 }
 
-export function availability(p: PC, radius: number): string {
-  if (p.n_nearby) {
-    const near = p.nearest_km != null ? `، نزدیک‌ترین ${p.nearest_km < 1 ? fa(Math.round(p.nearest_km * 1000 / 10) * 10) + " متر" : fa(p.nearest_km.toFixed(1)).replace(".", "٫") + " کیلومتر"}` : "";
-    return `${fa(p.n_nearby)} فروشگاه در ${fa(radius)} کیلومتری${near}`;
-  }
-  if (p.n_shops) return `${fa(p.n_shops)} فروشگاه، هیچ‌کدام در شعاع شما نیست`;
+export function availability(p: PC, _radius?: number): string {
+  if (p.n_nearby) return `در ${fa(p.n_nearby)} فروشگاه نزدیک شما`;
+  if (p.n_shops) return `در ${fa(p.n_shops)} فروشگاه، دور از شما`;
   return "فروشگاهی ثبت نشده";
 }
 
@@ -35,56 +32,30 @@ type CardProps = {
   onDetails: () => void;
 };
 
+/** Torob-style result row: image, name, "از … تومان", "در N فروشگاه نزدیک شما", one line of why. Tap = shops. */
 export function ProductCard({ p, ctx, compared, onShops, onCompare, onDetails }: CardProps) {
   return (
     <div className="pcard fadein">
-      <div className="top-row">
-        <button onClick={onDetails} aria-label="جزئیات کالا">
-          <Img src={p.image} />
-        </button>
-        <div className="grow stack" style={{ gap: 4 }}>
-          {p.tag && (
-            <span className="pill brand" style={{ alignSelf: "flex-start" }}>
-              {p.tag}
-            </span>
-          )}
-          <button className="ptitle clamp2" style={{ textAlign: "right" }} onClick={onDetails}>
-            {p.title}
-          </button>
+      <button className="top-row" onClick={onShops} style={{ textAlign: "right" }}>
+        <Img src={p.image} />
+        <div className="grow stack" style={{ gap: 2 }}>
+          {p.tag && <span className="ptag">{p.tag}</span>}
+          <div className="ptitle clamp2">{p.title}</div>
           <div className="price">{p.price_min ? `از ${toman(p.nearby_min_price || p.price_min)}` : "قیمت ثبت نشده"}</div>
-          <div className="shopsline row" style={{ gap: 5 }}>
-            <Icon name="store" size={14} />
-            <span className="grow">{availability(p, ctx.radius_km)}</span>
+          <div className="shopsline">
+            {availability(p)}
+            {ctx.installments_only && !!p.n_installment && <span className="inst">، {fa(p.n_installment)} قسطی</span>}
           </div>
         </div>
-      </div>
-      {p.why && (
-        <div className="why">
-          <Icon name="spark" size={15} />
-          <span>{p.why}</span>
-        </div>
-      )}
-      {p.specs?.length > 0 && (
-        <div className="specs">
-          {p.specs.slice(0, 4).map((s, i) => (
-            <span className="spec" key={i}>
-              <b>{s.k}:</b> {s.v}
-            </span>
-          ))}
-        </div>
-      )}
-      {!!p.n_installment && ctx.installments_only && (
-        <span className="pill green" style={{ alignSelf: "flex-start" }}>
-          <Icon name="card" size={13} /> {fa(p.n_installment)} فروشگاه با امکان قسطی
-        </span>
-      )}
+      </button>
+      {p.why && <div className="whyline"><Icon name="spark" size={14} /> <span className="clamp2">{p.why}</span></div>}
       <div className="pactions">
-        <button className="btn sm" onClick={onShops}>
-          <Icon name="pin" size={16} /> خرید حضوری
+        <button className="linkbtn" onClick={onDetails}>مشخصات</button>
+        <button className={"linkbtn" + (compared ? " on" : "")} onClick={onCompare}>
+          <Icon name={compared ? "check" : "compare"} size={15} /> {compared ? "در مقایسه" : "مقایسه"}
         </button>
-        <button className={"btn sm " + (compared ? "dark" : "secondary")} onClick={onCompare} style={{ flex: "0 0 auto" }}>
-          <Icon name={compared ? "check" : "compare"} size={16} /> مقایسه
-        </button>
+        <span className="grow" />
+        <button className="btn sm" onClick={onShops}>فروشگاه‌ها</button>
       </div>
     </div>
   );

@@ -90,9 +90,12 @@ await shot("02-ask-chips");
 // answer the first option of every open question until products arrive
 for (let round = 0; round < 3; round++) {
   if (await js("document.querySelectorAll('.pcard').length >= 2")) break;
-  await js(`(() => { const asks = [...document.querySelectorAll('.ask')]; const a = asks[asks.length - 1];
-    if (!a) return false; a.querySelectorAll('.opts').forEach((o) => o.querySelector('.opt')?.click());
-    const go = [...a.querySelectorAll('button')].find((b) => b.textContent.includes('ادامه')); go?.click(); return true })()`);
+  const nq = await js("(() => { const a = [...document.querySelectorAll('.ask')].pop(); return a ? a.querySelectorAll('.opts').length : 0 })()");
+  for (let q = 0; q < nq; q++) {  // one tap per question, like a person (state updates between taps)
+    await js(`(() => { const a = [...document.querySelectorAll('.ask')].pop(); a.querySelectorAll('.opts')[${q}].querySelector('.opt')?.click(); return true })()`);
+    await sleep(250);
+  }
+  await js(`(() => { const a = [...document.querySelectorAll('.ask')].pop(); const go = a && [...a.querySelectorAll('button')].find((b) => b.textContent.includes('ادامه')); go?.click(); return true })()`);
   await waitFor("document.querySelectorAll('.pcard').length >= 2 || (document.querySelectorAll('.ask').length > " + (round + 1) + ")", 30000);
 }
 await scrollTo(".agent:last-of-type .amsg");
@@ -116,16 +119,16 @@ await js("window.scrollBy(0, -70); true");
 await shot("07-shop-cards");
 await clickText("نمایش همه");
 await waitFor("document.querySelectorAll('.scard').length >= 3");
-await clickText("نقشه");
+await js("document.querySelector('.iconchip')?.click(); true");
 await waitFor("document.querySelector('.leaflet-container')");
 await sleep(2500);
 await scrollTo(".mapbox", "center");
 await shot("08-map");
-await clickText("فهرست");
+await js("document.querySelector('.iconchip')?.click(); true");
 
 // shop sheet with in-mall guide: first card whose mall line mentions a passage
 await js(`(() => { const c = [...document.querySelectorAll('.scard')].find((s) => /پاساژ|مجتمع/.test(s.textContent) && /طبقه/.test(s.textContent)) || document.querySelector('.scard');
-  [...c.querySelectorAll('button')].find((b) => b.textContent.includes('جزئیات'))?.click(); return true })()`);
+  c.querySelector('button.grow')?.click(); return true })()`);
 await waitFor("document.querySelector('.sheet .hours')");
 await js(`(() => { const g = [...document.querySelectorAll('.sheet .bold')].find((b) => b.textContent.includes('مسیر داخل پاساژ')); g?.scrollIntoView({ block: 'start' }); return !!g })()`);
 await shot("09-mall-guide");
@@ -142,7 +145,7 @@ await js(`(() => { const rows = [...document.querySelectorAll('.scenario')];
   const pick = (row, label) => [...row.querySelectorAll('button')].find((b) => b.textContent === label)?.click();
   if (rows[0]) pick(rows[0], 'موجود'); if (rows[1]) pick(rows[1], 'تغییر قیمت'); if (rows[2]) pick(rows[2], 'بی‌پاسخ'); return rows.length })()`);
 await shot("11-inquiry-draft");
-await clickText("ارسال و استعلام");
+await js("document.querySelector('main .card .btn.block')?.click(); true");
 await waitFor("document.querySelectorAll('.bubble-in').length >= 1", 20000);
 await shot("12-inquiry-replies");
 await waitFor("[...document.querySelectorAll('.insight h3')].some((h) => h.textContent.includes('جمع‌بندی'))", 40000);

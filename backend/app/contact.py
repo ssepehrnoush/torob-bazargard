@@ -140,7 +140,7 @@ async def _summary_text(product: dict, replies: list[dict], items: dict[int, dic
         llm.check_session_budget(budget_key)
         data = await asyncio.wait_for(llm.complete_json(
             "تو دستیار خرید حضوری هستی. نتیجهٔ استعلام (شبیه‌سازی‌شده) از فروشگاه‌ها را در حداکثر دو جملهٔ کوتاه فارسی "
-            "جمع‌بندی کن: بهترین انتخاب تأییدشده و دلیلش، و اگر فروشگاهی ناموفق بود بگو جایگزین آماده است. "
+            "جمع‌بندی کن: بهترین انتخاب تأییدشده و دلیلش؛ فقط اگر «تعداد جایگزین آماده» بیشتر از صفر است، بگو جایگزین آماده است. "
             "عدد قیمت را با «تومان» بنویس. خط تیره بلند و ایموجی نگذار. خروجی JSON: {\"text\": \"...\"}",
             f"کالا: {product.get('title')}\nبهترین: {items[best['sid']]['name'] if best else 'هیچ'}\n"
             f"تعداد جایگزین آماده: {n_alt}\n" + "\n".join(facts), max_tokens=300), timeout=8)

@@ -265,6 +265,11 @@ export default function App() {
           </div>
           <div className="spacer" />
           {meta && !meta.llm.available && <span className="pill amber">حالت ساده</span>}
+          {step !== "discover" && (
+            <button className="askbtn" onClick={() => setAskOpen(true)} aria-label="از دستیار بپرس">
+              <Icon name="spark" size={16} /> بپرس
+            </button>
+          )}
           {(feed.length > 0 || pid != null) && (
             <button className="iconbtn" onClick={reset} aria-label="شروع دوباره">
               <Icon name="refresh" size={19} />
@@ -369,11 +374,7 @@ export default function App() {
                 <button className="sendbtn" type="submit" disabled={busy || !input.trim()} aria-label="ارسال"><Icon name="send" size={20} /></button>
               </form>
             </div>
-          ) : (
-            <button className="btn blue fab" onClick={() => setAskOpen(true)}>
-              <Icon name="spark" size={16} /> از دستیار بپرس
-            </button>
-          )}
+          ) : null}
         </>
       )}
 
