@@ -103,27 +103,21 @@ p{{font-size:40px;color:#475569;margin-top:18px;font-weight:600}}
 <div class="wrap">{inner}</div></body></html>"""
 
 
+_pending: list[Path] = []
+
+
 def render(html_text: str, png: Path) -> None:
+    """Queue an HTML page; render_all() turns every queued page into a PNG in one Chrome session
+    (starting Chrome once per image crashed or hung every few renders on Windows)."""
     src = png.with_suffix(".html")
     src.write_text(html_text, encoding="utf-8")
-    import shutil
-    import tempfile
-    for attempt in range(3):
-        # a fresh profile per render: a Chrome left over from a previous render must not hold the lock
-        profile = tempfile.mkdtemp(prefix="bzp-")
-        try:
-            subprocess.run([CHROME, "--headless=new", "--disable-gpu", "--hide-scrollbars", "--force-device-scale-factor=1",
-                            f"--user-data-dir={profile}", "--no-first-run", "--no-default-browser-check",
-                            "--window-size=1920,1080", "--virtual-time-budget=3000", f"--screenshot={png}", src.as_uri()],
-                           check=True, capture_output=True, timeout=45)
-            return
-        except (subprocess.TimeoutExpired, subprocess.CalledProcessError) as e:
-            if png.exists() and png.stat().st_size > 10_000:
-                return  # Chrome sometimes crashes on exit after writing the screenshot
-            print(f"render failed ({type(e).__name__}), retrying: {png.name}", flush=True)
-        finally:
-            shutil.rmtree(profile, ignore_errors=True)
-    sys.exit(f"could not render {png.name}")
+    _pending.append(src)
+
+
+def render_all() -> None:
+    if _pending:
+        subprocess.run(["node", str(Path(__file__).with_name("render.mjs")), *map(str, _pending)], check=True, timeout=900)
+        _pending.clear()
 
 
 def ffmpeg(*args: str) -> None:
@@ -173,6 +167,9 @@ def main() -> None:
         lines += [f"file '{cache[k]}'", f"duration {(t_end - t) / 1000:.3f}"]
     lines.append(f"file '{cache[(segs[-1][2], segs[-1][3])]}'")
     (WORK / "panels.txt").write_text("\n".join(lines), encoding="utf-8")
+    render(card_html("intro"), WORK / "intro.png")
+    render(card_html("outro"), WORK / "outro.png")
+    render_all()
     print(f"panels: {len(cache)} images, {len(segs)} segments")
 
     # 2) phone screen video from the screencast frames
@@ -219,9 +216,7 @@ def main() -> None:
         w.setframerate(SR)
         w.writeframes(bytes(buf))
 
-    # 4) intro and outro cards, then everything joined with soft fades
-    render(card_html("intro"), WORK / "intro.png")
-    render(card_html("outro"), WORK / "outro.png")
+    # 4) intro and outro cards (rendered with the panels), then everything joined with soft fades
     ffmpeg("-loop", "1", "-t", f"{INTRO_S}", "-i", "intro.png", "-vf",
            f"fps={FPS},format=yuv420p,fade=in:st=0:d=0.5,fade=out:st={INTRO_S - 0.4}:d=0.4", *enc, "intro.mp4")
     ffmpeg("-loop", "1", "-t", f"{OUTRO_S}", "-i", "outro.png", "-vf",

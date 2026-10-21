@@ -109,6 +109,10 @@ async function say() {
   voiceEnd = start + v.dur * 1000;
   log("SAY", lid, v.text.slice(0, 40));
 }
+async function untilSpoken(extra = 0) {
+  const wait = voiceEnd + extra * 1000 - tick();
+  if (wait > 0) await hold(wait / 1000);
+}
 async function endScene(pad = 0.5) {
   const wait = voiceEnd + pad * 1000 - tick();
   if (wait > 0) await hold(wait / 1000);
@@ -202,11 +206,16 @@ await endScene(0.3);
 beginScene("ask");
 await tapEl("document.querySelector('.composer input')", { scroll: false });
 await say();
-await type("یه گوشی سامسونگ با دوربین خوب می‌خوام، تا ۲۰۰ میلیون، قسطی. اورجینال باشه");
+await type("یه گوشی سامسونگ با دوربین خوب می‌خوام ولی نمی‌دونم کدوم مدل، تا ۲۰۰ میلیون، قسطی. اورجینال باشه");
 await hold(0.4);
 await tapEl("document.querySelector('.composer .sendbtn')", { scroll: false });
 await js("document.querySelector('.composer form')?.requestSubmit(); true");
 await waitFor("document.querySelector('.ask') || document.querySelectorAll('.pcard').length >= 2");
+if (!(await js("!!document.querySelector('.ask')"))) {
+  log("NO-ASK: the assistant answered without a question this time; the narration needs one");
+  proc.kill();
+  process.exit(4);
+}
 await hold(0.8);
 await say();
 await hold(1.0);
@@ -254,13 +263,13 @@ await hold(0.6);
 await tapEl("document.querySelector('.placechip')", { scroll: false });
 await waitFor("document.querySelector('.sheet .segmented')", 10000, false);
 await say();
-await hold(1.2);
+await untilSpoken(-1.0);
 await tapEl("document.querySelector('.sheet .filtersrow')");
 await waitFor("[...document.querySelectorAll('.sheet h3')].some((h) => h.textContent.includes('کی می‌روید'))", 10000, false);
 await hold(0.4);
 await tapEl(byText("فردا صبح", ".sheet button"));
 await say();
-await hold(0.8);
+await untilSpoken(-0.6);
 await tapEl(byText("نمایش نتیجه", ".sheet button"), { scroll: false });
 await waitFor("!document.querySelector('.sheet') && document.querySelectorAll('.scard').length >= 1 && !document.querySelector('.ainote .shimmer')");
 await tapEl(byText("نمایش همه"));
@@ -273,9 +282,12 @@ await hold(1.2);
 await tapEl(byText("نزدیک‌ترین"));
 await hold(1.2);
 await tapEl(byText("پیشنهادی"));
-await smoothScroll(300, 1.4);
+await untilSpoken();
+await js("document.querySelector('.listhead')?.scrollIntoView({ block: 'start', behavior: 'smooth' }); window.scrollBy(0, -90); true");
 await say();
-await hold(1.0);
+await hold(1.6);
+await smoothScroll(240, 1.4);
+await untilSpoken(0.2);
 await tapEl("document.querySelector('.mapbtn')");
 await waitFor("document.querySelector('.leaflet-container')", 15000, false);
 await hold(0.5);
@@ -322,7 +334,7 @@ await say();
 await tapEl("document.querySelector('.sticky-cta .btn')", { scroll: false });
 await waitFor("document.querySelectorAll('.bubble-in').length >= 2", 30000, false);
 await say();
-await hold(1.0);
+await untilSpoken(0.2);
 await waitFor("[...document.querySelectorAll('.ainote-title')].some((h) => h.textContent.includes('جمع‌بندی'))", 60000);
 await js(`(() => { const h = [...document.querySelectorAll('.ainote-title')].find((x) => x.textContent.includes('جمع‌بندی')); h?.closest('.ainote').scrollIntoView({ block: 'start', behavior: 'smooth' }); return true })()`);
 await hold(0.8);
@@ -361,7 +373,7 @@ await say();
 await tapEl(byText("با مترو", ".sheet button"));
 await tapEl(byText("محلهٔ دیگر", ".sheet button"));
 await tapEl(byText("میدان تجریش", ".sheet button"));
-await hold(0.5);
+await untilSpoken(-0.3);
 await tapEl(byText("نمایش نتیجه", ".sheet button"), { scroll: false });
 await hold(0.6);
 await tapEl(byText("فروشگاه‌ها", ".jstep"), { scroll: false });
