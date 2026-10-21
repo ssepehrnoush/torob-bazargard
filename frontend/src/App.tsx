@@ -11,6 +11,7 @@ import { ShopSheet } from "./components/ShopSheet";
 import { ShopsView } from "./components/ShopsView";
 import { VisitView } from "./components/VisitView";
 import { fa } from "./fmt";
+import { browserSpeaksPersian, startRecording, transcribe, unlockAudio } from "./voice";
 import { Icon } from "./icons";
 import type { Authenticity, Bargain, Ctx, FeedItem, Meta, ProductCard } from "./types";
 
@@ -36,6 +37,7 @@ const PLACEHOLDER: Record<Step, string> = {
   visit: "مثلاً: فردا صبح می‌رم، دوباره بچین",
 };
 /* Web Speech API error codes, each with what the person can actually do about it. */
+const VOICE_FALLBACK = new Set(["network", "service-not-allowed", "language-not-supported"]);
 const VOICE_ERROR: Record<string, string> = {
   "not-allowed": "اجازهٔ میکروفون داده نشده؛ از تنظیمات مرورگر اجازه بدهید یا تایپ کنید",
   "service-not-allowed": "مرورگر شما اجازهٔ تشخیص صدا نمی‌دهد؛ لطفاً تایپ کنید",
@@ -104,33 +106,84 @@ export default function App() {
   const settled = useRef<Set<string>>(new Set());
   const demo = new URLSearchParams(window.location.search).has("demo");
   const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-  const speech = !!SR;
-  const [listening, setListening] = useState(false);
+  // idle → listening (browser speech) or recording (our own recorder) → transcribing → idle
+  const [voice, setVoice] = useState<"idle" | "listening" | "recording" | "transcribing">("idle");
+  const [recSec, setRecSec] = useState(0);
+  const recRef = useRef<{ stop: () => Promise<Blob>; cancel: () => void } | null>(null);
+  const serverStt = useRef(false); // set after the browser's speech service fails once (usual in Iran)
+  const sendRef = useRef<(t: string, viaVoice?: boolean) => void>(() => {});
   useKeyboardInset();
 
-  const listen = () => {
-    if (!SR || listening) return;
+  useEffect(() => {
+    if (voice !== "recording") return;
+    setRecSec(0);
+    const t = window.setInterval(() => setRecSec((n) => n + 1), 1000);
+    return () => window.clearInterval(t);
+  }, [voice]);
+
+  const finishRecording = async () => {
+    const r = recRef.current;
+    if (!r) return;
+    recRef.current = null;
+    setVoice("transcribing");
+    try {
+      const text = await transcribe(await r.stop());
+      setVoice("idle");
+      sendRef.current(text, true);
+    } catch (e: any) {
+      setVoice("idle");
+      toast(e?.message ?? "تبدیل صدا به متن نشد؛ لطفاً تایپ کنید");
+    }
+  };
+  const finishRef = useRef(finishRecording);
+  finishRef.current = finishRecording;
+
+  const startRecorder = async () => {
+    try {
+      recRef.current = await startRecording(15000, () => finishRef.current());
+      setVoice("recording");
+    } catch (e: any) {
+      setVoice("idle");
+      toast(e?.message ?? "میکروفون باز نشد؛ لطفاً تایپ کنید");
+    }
+  };
+
+  /** One mic button for every browser: tap to talk; in recording mode tap again to send. */
+  const onMic = () => {
+    unlockAudio(); // lets the spoken answer play later on phones
+    if (voice === "recording") return void finishRef.current();
+    if (voice !== "idle" || busy) return;
+    if (!SR || serverStt.current || meta?.voice?.stt === true) return void startRecorder();
     const rec = new SR();
     rec.lang = "fa-IR";
     rec.interimResults = false;
     rec.maxAlternatives = 1;
     rec.onresult = (e: any) => {
       const t = e.results?.[0]?.[0]?.transcript as string | undefined;
-      if (t) send(t);
+      if (t) sendRef.current(t, true);
     };
     rec.onerror = (e: any) => {
       if (e?.error === "aborted") return; // stopped on purpose, nothing to say
+      if (VOICE_FALLBACK.has(e?.error)) {
+        serverStt.current = true;
+        toast("یک بار دیگر بگویید؛ این بار صدا را خودمان به متن تبدیل می‌کنیم");
+        void startRecorder();
+        return;
+      }
       toast(VOICE_ERROR[e?.error] ?? "صدا تشخیص داده نشد؛ لطفاً تایپ کنید");
     };
-    rec.onend = () => setListening(false);
-    setListening(true);
+    rec.onend = () => setVoice((v) => (v === "listening" ? "idle" : v));
+    setVoice("listening");
     try {
       rec.start();
     } catch {
-      setListening(false);
-      toast("تشخیص صدا شروع نشد؛ لطفاً تایپ کنید");
+      void startRecorder();
     }
   };
+  const micLabel = voice === "recording" ? "پایان ضبط و ارسال" : "گفتن با صدا";
+  const micPlaceholder = voice === "listening" ? "در حال شنیدن…"
+    : voice === "recording" ? `در حال ضبط، ${fa(recSec)} ثانیه؛ دوباره بزنید تا بفرستم`
+    : voice === "transcribing" ? "در حال تبدیل صدا به متن…" : null;
 
   useEffect(() => {
     get<Meta>("/api/meta").then(setMeta).catch(() => {});
@@ -205,7 +258,7 @@ export default function App() {
 
   const prefKey = (c: Ctx) => [c.lat, c.lon, c.range_mode, c.range_minutes, c.radius_km, c.travel_mode, c.budget_min, c.budget_max, c.installments_only, c.originality].join("|");
 
-  const send = async (raw: string) => {
+  const send = async (raw: string, viaVoice = false) => {
     const text = raw.trim();
     if (!text || busy) return;
     if (!firstNeed.current) firstNeed.current = text;
@@ -217,7 +270,7 @@ export default function App() {
     const t0 = performance.now();
     const before = ctxRef.current;
     stick.current = true;
-    setFeed((f) => [...f, { kind: "user", id: uid, text }, { kind: "agent", id: aid, steps: [], pending: true }]);
+    setFeed((f) => [...f, { kind: "user", id: uid, text }, { kind: "agent", id: aid, steps: [], pending: true, speak: viaVoice }]);
     if (step !== "discover") setOverlay(aid);
     setBusy(true);
     const patch = (fn: (a: AgentItem) => AgentItem) =>
@@ -280,6 +333,8 @@ export default function App() {
     setBusy(false);
   };
 
+  sendRef.current = send;
+
   const reset = () => {
     if (busy) return;
     session.current = null;
@@ -329,6 +384,8 @@ export default function App() {
       if (target != null) openShops(target, shopPicks, shopMsg, b.sid);
     },
     onEditFilters: () => setSheet({ kind: "filters" }),
+    onToast: toast,
+    tts: meta?.voice?.tts === true || browserSpeaksPersian(), // no speaker button until some voice can actually read
   };
   const stepIdx = STEPS.findIndex((x) => x.key === step);
   const openShop = (sid: number, offer?: { authenticity?: Authenticity }) => setSheet({ kind: "shop", sid, auth: offer?.authenticity });
@@ -421,10 +478,9 @@ export default function App() {
         <div className="composer">
           <form onSubmit={(e) => { e.preventDefault(); send(input); }}>
             <input value={input} onChange={(e) => setInput(e.target.value)} enterKeyHint="send" aria-label="پیام به دستیار"
-              placeholder={listening ? "در حال شنیدن…" : feed.length ? PLACEHOLDER.discover : "اسم کالا یا نیازت رو بنویس…"} />
-            {speech && (
-              <button type="button" className={"micbtn" + (listening ? " rec" : "")} onClick={listen} disabled={busy} aria-label="گفتن با صدا"><Icon name="mic" size={20} /></button>
-            )}
+              placeholder={micPlaceholder ?? (feed.length ? PLACEHOLDER.discover : "اسم کالا یا نیازت رو بنویس…")} />
+            <button type="button" className={"micbtn" + (voice === "listening" || voice === "recording" ? " rec" : "") + (voice === "transcribing" ? " busy" : "")}
+              onClick={onMic} disabled={(busy && voice === "idle") || voice === "transcribing"} aria-label={micLabel}><Icon name="mic" size={20} /></button>
             <button className="sendbtn" type="submit" disabled={busy || !input.trim()} aria-label="ارسال"><Icon name="up" size={20} stroke={2} /></button>
           </form>
         </div>
@@ -453,8 +509,10 @@ export default function App() {
               <div className="backdrop light" onClick={() => setAskOpen(false)} />
               <div className="composer floating">
                 <form onSubmit={(e) => { e.preventDefault(); send(input); }}>
-                  <input autoFocus value={input} onChange={(e) => setInput(e.target.value)} placeholder={PLACEHOLDER[step]} enterKeyHint="send" aria-label="پیام به دستیار" />
                   <button type="button" className="micbtn" onClick={() => setAskOpen(false)} aria-label="بستن"><Icon name="x" size={20} /></button>
+                  <input autoFocus value={input} onChange={(e) => setInput(e.target.value)} placeholder={micPlaceholder ?? PLACEHOLDER[step]} enterKeyHint="send" aria-label="پیام به دستیار" />
+                  <button type="button" className={"micbtn" + (voice === "listening" || voice === "recording" ? " rec" : "") + (voice === "transcribing" ? " busy" : "")}
+                    onClick={onMic} disabled={(busy && voice === "idle") || voice === "transcribing"} aria-label={micLabel}><Icon name="mic" size={20} /></button>
                   <button className="sendbtn" type="submit" disabled={busy || !input.trim()} aria-label="ارسال"><Icon name="up" size={20} stroke={2} /></button>
                 </form>
               </div>

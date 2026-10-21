@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fa } from "../fmt";
 import { Icon } from "../icons";
 import type { Bargain, Ctx, FeedItem, Meta, ProductCard as PC, Question } from "../types";
 import { BargainCard } from "./bits";
 import { RadishLogo } from "./Logo";
 import { ProductCard } from "./Products";
+import { speak, stopSpeaking } from "../voice";
 
 /* Every example is a real query: each one returns products from the dataset (checked with /api/search). */
 const EXAMPLES: [string, string][] = [
@@ -27,6 +28,8 @@ export type FeedHandlers = {
   onOpenInquiry: () => void;
   onBargain: (b: Bargain) => void;
   onEditFilters: () => void;
+  onToast: (s: string) => void;
+  tts: boolean;
   busy: boolean;
 };
 
@@ -80,12 +83,36 @@ export function Feed({ items, stale, onRefresh, ...h }: FeedHandlers & { items: 
 
 export function AgentBlock({ it, ...h }: FeedHandlers & { it: AgentItem }) {
   const [showSteps, setShowSteps] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const spoke = useRef(false);
   const open = it.pending || showSteps; // live steps while working, one quiet line afterwards
+  const canSpeak = h.tts && !it.pending && !!it.message;
+  const play = () => {
+    if (playing) return stopSpeaking();
+    setPlaying(true);
+    speak(it.id, it.message!, () => setPlaying(false)).catch((e) => {
+      setPlaying(false);
+      h.onToast(e?.message ?? "پخش صوتی جواب الان در دسترس نیست");
+    });
+  };
+  // A question asked by voice gets its answer read aloud once, as soon as it lands.
+  useEffect(() => {
+    if (it.speak && canSpeak && !spoke.current) {
+      spoke.current = true;
+      play();
+    }
+  }, [it.speak, canSpeak]); // eslint-disable-line
   return (
     <div className="agent fadein" data-id={it.id}>
       <div className="agenthead">
         <span className="avatar"><RadishLogo size={15} /></span>
         <span>دستیار ترب</span>
+        {canSpeak && (
+          <button className={"speakbtn" + (playing ? " on" : "")} onClick={play} aria-label={playing ? "توقف پخش" : "شنیدن جواب"} aria-pressed={playing}>
+            <Icon name={playing ? "stop" : "volume"} size={16} />
+            {playing ? "توقف" : "بشنو"}
+          </button>
+        )}
         {!it.pending && it.steps.length > 0 && (
           <button className="stepstoggle" onClick={() => setShowSteps(!showSteps)} aria-expanded={showSteps}>
             <Icon name="check" size={14} stroke={2.2} /> {fa(it.steps.length)} کار انجام شد

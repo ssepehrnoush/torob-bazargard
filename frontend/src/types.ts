@@ -171,6 +171,7 @@ export type FeedItem =
       inquiry?: { pid: number; sids: number[] };
       bargain?: Bargain | null;
       applied?: string[];
+      speak?: boolean; // asked by voice: read the answer aloud when it lands
       error?: string;
       elapsed?: number;
     };
@@ -256,6 +257,7 @@ export type Meta = {
   now: string;
   travel_modes?: Record<TravelMode, string>;
   range_minutes_presets?: number[];
+  voice?: { stt: boolean; tts: boolean };
 };
 
 export type StrollStop = {

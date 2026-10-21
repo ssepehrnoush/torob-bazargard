@@ -49,6 +49,8 @@ const P: Record<string, string> = {
   train: "M8 3h8c2.2 0 4 1.8 4 4v7c0 2.2-1.8 4-4 4H8c-2.2 0-4-1.8-4-4V7c0-2.2 1.8-4 4-4z M4 11h16 M12 3v8 M8 14.5h.01 M16 14.5h.01 M8.5 18L6.5 21 M15.5 18l2 3",
   car: "M15.5 2.8h-7c-2.5 0-3 1.2-3.3 2.8L4 10.5h16l-1.2-4.9c-.3-1.6-.8-2.8-3.3-2.8z M3 17v2.2c0 .7.5 1.3 1.3 1.3h1.4c.7 0 1.3-.6 1.3-1.3V17h10v2.2c0 .7.6 1.3 1.3 1.3h1.4c.8 0 1.3-.6 1.3-1.3V17 M2.5 13.5c0-1.7 1.3-3 3-3h13c1.7 0 3 1.3 3 3V17h-19z M6.5 13.8h1.5 M16 13.8h1.5",
   more: "M5 12h.01 M12 12h.01 M19 12h.01",
+  volume: "M3 9.5v5c0 1 .5 1.5 1.5 1.5H7l4 3.5V4.5L7 8H4.5C3.5 8 3 8.5 3 9.5z M15.5 8.5a5 5 0 0 1 0 7 M18.5 5.5a9 9 0 0 1 0 13",
+  stop: "M7.5 6.5h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1z",
 };
 
 export function Icon({ name, size = 20, style, className, stroke = 1.6 }: { name: keyof typeof P | string; size?: number; style?: CSSProperties; className?: string; stroke?: number }) {
