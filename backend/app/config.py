@@ -31,8 +31,10 @@ _load_dotenv()
 PROVIDERS = {
     # name: (base_url, api-key env var, default model)
     # BoxAPI is an OpenAI-compatible gateway reachable from Iranian data centres (OpenAI is not).
-    "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-4.1-mini"),
-    "boxapi": ("https://ai.boxapi.ir/ai/v1", "BOXAPI_KEY", "openai/gpt-4.1-mini"),
+    # gpt-6-sol: the strongest model that still takes function tools on chat/completions (gpt-6.1-sol needs the
+    # Responses API); in our scenarios it asked better questions and picked better products than gpt-4.1-mini
+    "openai": ("https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-6-sol"),
+    "boxapi": ("https://ai.boxapi.ir/ai/v1", "BOXAPI_KEY", "openai/gpt-6-sol"),
 }
 
 
@@ -54,8 +56,8 @@ def _endpoint(name: str) -> LLMEndpoint | None:
     if not key:
         return None
     model = os.environ.get(f"{name.upper()}_MODEL", "").strip() or default_model
-    # GPT-5.x only accepts function tools on chat/completions with reasoning switched off.
-    extra = {"reasoning_effort": "none"} if model.split("/")[-1].startswith("gpt-5") else {}
+    # GPT-5.x and 6.x only accept function tools on chat/completions with reasoning switched off.
+    extra = {"reasoning_effort": "none"} if model.split("/")[-1].startswith(("gpt-5", "gpt-6")) else {}
     return LLMEndpoint(name, os.environ.get(f"{name.upper()}_BASE_URL", base), key, model, extra)
 
 
@@ -64,8 +66,9 @@ def llm_endpoints() -> list[LLMEndpoint]:
     LLM_DISABLED=1 is the kill switch: no model is ever called and the app runs rule-based."""
     if os.environ.get("LLM_DISABLED", "").strip().lower() in ("1", "true", "yes"):
         return []
-    # every model call goes through the sponsor gateway BoxAPI; OpenAI only when set explicitly
-    order = [os.environ.get("LLM_PROVIDER", "boxapi"), os.environ.get("LLM_FALLBACK_PROVIDER", "none")]
+    # the sponsor gateway BoxAPI answers every call; OpenAI is only the backup when BoxAPI fails (out of credit,
+    # down). From Iranian data centres OpenAI usually refuses (403), and then the app runs rule-based.
+    order = [os.environ.get("LLM_PROVIDER", "boxapi"), os.environ.get("LLM_FALLBACK_PROVIDER", "openai")]
     out: list[LLMEndpoint] = []
     for name in order:
         ep = _endpoint(name)

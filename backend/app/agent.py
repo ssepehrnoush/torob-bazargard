@@ -344,7 +344,11 @@ async def exec_tool(name: str, args: dict, ctx: Ctx, sess: dict) -> tuple[str, d
             _remember(sess, similar)
         st = res["stats"]
         # a worthwhile shop beyond the range is offered to the user even if the model words it differently
-        sess["bargain"] = {"pid": pid, **res["bargain"]} if res.get("bargain") else None
+        # kept per product: a strong model checks several variants in one turn, and the shops page shows one of them
+        offers = sess.setdefault("bargains", {})
+        offers[pid] = {"pid": pid, **res["bargain"]} if res.get("bargain") else None
+        if offers[pid]:
+            sess["bargain"] = offers[pid]
         return fmt_shops(pid, res, similar), {
             "detail": f"{fa_digits(st['total'])} فروشگاه، {fa_digits(st['in_radius'])} در محدودهٔ شما"}, ctx
     return f"ابزار ناشناخته: {name}", None, ctx
@@ -528,9 +532,8 @@ def terminal_event(name: str, args: dict, ctx: Ctx, sess: dict) -> dict | None:
                 continue
             if shops.shop(sid):
                 picks.append({"sid": sid, "why": fa_text(p.get("why", ""))})
-        bargain = sess.pop("bargain", None)
-        if bargain and bargain.get("pid") != pid:
-            bargain = None
+        bargain = (sess.get("bargains") or {}).get(pid)
+        sess.pop("bargain", None)
         return {"type": "shops", "pid": pid, "product": card, "message": fa_text(args.get("message", "")), "picks": picks,
                 "bargain": bargain,
                 "suggestions": [fa_text(x) for x in args.get("suggestions", [])[:4]]}
@@ -590,6 +593,7 @@ async def run_turn(session_id: str | None, text: str, ctx: Ctx, ui: dict) -> Asy
         return
     t0 = time.monotonic()
     sess.pop("bargain", None)  # an offer belongs to the turn that found it
+    sess.pop("bargains", None)
     for it in range(MAX_ITERATIONS):
         history = _trim(sess["messages"])
         last_user = max(i for i, m in enumerate(history) if m["role"] == "user")

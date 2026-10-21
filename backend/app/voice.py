@@ -36,32 +36,41 @@ _tts_cache: OrderedDict[str, bytes] = OrderedDict()
 _tts_recent: deque[float] = deque()
 
 
-def _endpoint():
-    eps = config.llm_endpoints()
+def _endpoints(models: dict) -> list:
+    """Same order as the chat model: BoxAPI first, the backup next."""
+    eps = [e for e in config.llm_endpoints() if e.name in models]
     if not eps:
         raise llm.LLMUnavailable("no provider configured (or LLM_DISABLED)")
-    return eps[0]
+    return eps
 
 
 def enabled() -> dict:
     eps = config.llm_endpoints()
-    return {"stt": bool(eps) and eps[0].name in STT_MODEL, "tts": bool(eps) and eps[0].name in TTS_MODEL}
+    return {"stt": any(e.name in STT_MODEL for e in eps), "tts": any(e.name in TTS_MODEL for e in eps)}
 
 
 async def transcribe(audio: bytes, filename: str, content_type: str, lang: str = "fa") -> str:
-    ep = _endpoint()
-    async with llm._gate:
-        await llm._rate_wait()
-        t0 = time.monotonic()
-        r = await llm.client().post(
-            f"{ep.base_url}/audio/transcriptions", headers={"Authorization": f"Bearer {ep.api_key}"},
-            data={"model": STT_MODEL[ep.name], "language": lang or "fa"},
-            files={"file": (filename, audio, content_type or "application/octet-stream")})
-    if r.status_code >= 400:
-        raise llm.LLMUnavailable(f"{ep.name} stt HTTP {r.status_code}: {r.text[:200]}")
-    text = (r.json().get("text") or "").strip()
-    log.info("stt %s %.1fs %d bytes -> %d chars", ep.name, time.monotonic() - t0, len(audio), len(text))
-    return text
+    errors = []
+    for ep in _endpoints(STT_MODEL):
+        async with llm._gate:
+            await llm._rate_wait()
+            t0 = time.monotonic()
+            try:
+                r = await llm.client().post(
+                    f"{ep.base_url}/audio/transcriptions", headers={"Authorization": f"Bearer {ep.api_key}"},
+                    data={"model": STT_MODEL[ep.name], "language": lang or "fa"},
+                    files={"file": (filename, audio, content_type or "application/octet-stream")})
+            except llm.httpx.HTTPError as e:
+                errors.append(f"{ep.name}: {type(e).__name__}")
+                continue
+        if r.status_code >= 400:
+            log.warning("stt %s HTTP %s: %s", ep.name, r.status_code, r.text[:200])
+            errors.append(f"{ep.name}: HTTP {r.status_code}")
+            continue
+        text = (r.json().get("text") or "").strip()
+        log.info("stt %s %.1fs %d bytes -> %d chars", ep.name, time.monotonic() - t0, len(audio), len(text))
+        return text
+    raise llm.LLMUnavailable("; ".join(errors))
 
 
 def clip_text(text: str) -> str:
@@ -101,13 +110,22 @@ async def speak(text: str) -> bytes:
         _tts_recent.popleft()
     if len(_tts_recent) >= TTS_PER_HOUR:
         raise llm.BudgetExceeded("hourly read-aloud cap reached")
-    ep = _endpoint()
-    async with llm._gate:
-        await llm._rate_wait()
-        _tts_recent.append(time.monotonic())
-        t0 = time.monotonic()
-        audio = await (_speak_openai(ep, text) if ep.name == "openai" else _speak_chat_audio(ep, text))
-    log.info("tts %s %.1fs %d chars -> %d bytes", ep.name, time.monotonic() - t0, len(text), len(audio))
+    errors, audio = [], None
+    for ep in _endpoints(TTS_MODEL):
+        async with llm._gate:
+            await llm._rate_wait()
+            _tts_recent.append(time.monotonic())
+            t0 = time.monotonic()
+            try:
+                audio = await (_speak_openai(ep, text) if ep.name == "openai" else _speak_chat_audio(ep, text))
+            except (llm.LLMUnavailable, llm.httpx.HTTPError, ValueError) as e:
+                log.warning("tts %s failed: %s", ep.name, str(e)[:200])
+                errors.append(f"{ep.name}: {type(e).__name__}")
+                continue
+        log.info("tts %s %.1fs %d chars -> %d bytes", ep.name, time.monotonic() - t0, len(text), len(audio))
+        break
+    if audio is None:
+        raise llm.LLMUnavailable("; ".join(errors))
     _tts_cache[key] = audio
     while len(_tts_cache) > 200:
         _tts_cache.popitem(last=False)

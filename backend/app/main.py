@@ -307,6 +307,12 @@ async def visit_plan(body: VisitIn):
 AUDIO_TYPES = ("audio/", "video/webm", "video/mp4", "application/octet-stream")
 
 
+@app.get("/api/llm/check")
+async def llm_check():
+    """Which AI providers this server can reach right now (BoxAPI first, the backup next)."""
+    return {"providers": await llm.check_providers()}
+
+
 @app.post("/api/stt")
 async def speech_to_text(request: Request, audio: UploadFile = File(...), lang: str = Form("fa")):
     data = await audio.read(voice.STT_MAX_BYTES + 1)

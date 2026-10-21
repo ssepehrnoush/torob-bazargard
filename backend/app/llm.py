@@ -66,6 +66,32 @@ class BudgetExceeded(LLMUnavailable):
     pass
 
 
+_check: tuple[float, list] | None = None
+
+
+async def check_providers() -> list[dict]:
+    """Can this server reach each provider? Lists the models (free, no tokens) with every configured key; cached
+    for five minutes. Shows only status codes, never keys."""
+    global _check
+    if _check and time.monotonic() - _check[0] < 300:
+        return _check[1]
+    out = []
+    for ep in config.llm_endpoints():
+        t0 = time.monotonic()
+        try:
+            r = await client().get(f"{ep.base_url}/models", headers={"Authorization": f"Bearer {ep.api_key}"}, timeout=15)
+            body = r.text[:400].lower()
+            note = ("blocked for this country" if "unsupported_country" in body
+                    else "out of credit" if r.status_code == 402 or "budget" in body else None)
+            out.append({"provider": ep.name, "model": ep.model, "status": r.status_code, "ok": r.status_code == 200,
+                        "note": note, "ms": round((time.monotonic() - t0) * 1000)})
+        except httpx.HTTPError as e:
+            out.append({"provider": ep.name, "model": ep.model, "status": None, "ok": False, "note": type(e).__name__,
+                        "ms": round((time.monotonic() - t0) * 1000)})
+    _check = (time.monotonic(), out)
+    return out
+
+
 # The BoxAPI key allows one request at a time and ~20 per minute, shared with another app, so calls are
 # serialised, spaced, and capped per session; identical requests are served from the cache above.
 _gate = asyncio.Semaphore(config.LLM_CONCURRENCY)

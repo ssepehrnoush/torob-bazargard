@@ -116,8 +116,9 @@ def multipart(field: str, filename: str, payload: bytes) -> tuple[bytes, str]:
 def set_envs() -> None:
     variables = [
         {"key": "LLM_PROVIDER", "value": "boxapi"},
-        {"key": "LLM_FALLBACK_PROVIDER", "value": "none"},
+        {"key": "LLM_FALLBACK_PROVIDER", "value": "openai"},  # backup only; see /api/llm/check for reachability
         {"key": "BOXAPI_KEY", "value": ENV.get("BOXAPI_KEY", "")},
+        {"key": "OPENAI_API_KEY", "value": ENV.get("OPENAI_API_KEY", "")},
     ]
     if os.environ.get("BOXAPI_MODEL"):
         variables.append({"key": "BOXAPI_MODEL", "value": os.environ["BOXAPI_MODEL"]})
